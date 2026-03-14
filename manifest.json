@@ -1,0 +1,10 @@
+{
+    "display_name": "Image Auto Generation",
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "author": "wsthrowawawy123123",
+    "version": "1.0.4",
+    "homePage": "https://github.com/wsthrowawawy123123/st-image-generation-with-classifier",
+    "auto_update": true
+}

@@ -1,0 +1,8 @@
+{
+  "name": "st-image-generation-with-classifier",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/imageGenerationState.test.js && node test/promptPhraseUtils.test.js && node test/sceneMemory.test.js && node test/analysisPipeline.test.js"
+  }
+}

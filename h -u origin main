@@ -1,0 +1,298 @@
+[33mcommit b9dde55be5b33a0a9d463b09feac1cf62f77ca0e[m[33m ([m[1;36mHEAD -> [m[1;32mfeat/imageGenExtension[m[33m)[m
+Author: Your Name <you@example.com>
+Date:   Sat Mar 14 14:23:03 2026 -0700
+
+    Fixing naming
+
+[33mcommit 5b8b3b931118d79f75a9ea07fb6fb3285dbf662e[m[33m ([m[1;31morigin/feat/imageGenExtension[m[33m, [m[1;32mmain[m[33m)[m
+Author: Your Name <you@example.com>
+Date:   Sat Mar 14 14:17:15 2026 -0700
+
+    Consolidate recent image-generation extension changes
+
+[33mcommit 6cbb8cabe53a8a4150adccff0d93d81feb54c04c[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 25 18:40:55 2025 -0400
+
+    fix: update image tag to include title attribute and remove unused screenshot
+
+[33mcommit 085d3bac50af27aad9082d20e19ed4400ecc7402[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 25 15:12:12 2025 -0400
+
+    chore: update readme
+
+[33mcommit 94f2ac50bd25c2456ec7d72944a7533e00924e25[m
+Merge: 4acc58e 070b35f
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 25 14:43:06 2025 -0400
+
+    Merge branch 'main' of https://github.com/wickedcode01/image-auto-generation
+
+[33mcommit 4acc58eff5ffd9cdf9c416e6584ea7d8a2568cc6[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 25 14:39:41 2025 -0400
+
+    feat: 支持行内替换模式
+
+[33mcommit 070b35fe33f84dfba9d3f66d6be7cb121a10d203[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 25 14:39:41 2025 -0400
+
+    feat: 支持行内替换模式
+
+[33mcommit c884b97b3c10f0ed6c4308a5cea44b5f9e76bd87[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 25 13:03:47 2025 -0400
+
+    fix: 修复无法匹配多个标签的问题
+
+[33mcommit 0200df366d44b1c056b0d4acce2b2d8a43fa2e96[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Fri May 23 16:12:37 2025 -0400
+
+    chore: remove unused image references from README files
+
+[33mcommit d4515dc1cc16ee91cfb060dccec6862fe2e74fc4[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Fri May 23 16:11:20 2025 -0400
+
+    chore: readme update
+
+[33mcommit 3db3435c73e8fef52229d8573ccb490ef467f906[m
+Merge: f2c99c3 6ad714a
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Fri May 23 16:08:44 2025 -0400
+
+    Merge branch 'main' of https://github.com/wickedcode01/image-auto-generation
+
+[33mcommit f2c99c3fc2be935e3e9ee0e96255bb0ebd32d41e[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Fri May 23 16:07:05 2025 -0400
+
+    chore: readme update
+
+[33mcommit 6ad714adb9ddee192da441ef7234f4551e646981[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Fri May 23 05:01:47 2025 -0400
+
+    Update README_CN.md
+
+[33mcommit bbdb32f48afb376484e76c64c5b7aa041c3079b6[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Fri May 23 05:01:22 2025 -0400
+
+    Update README.md
+
+[33mcommit 6f7c0cdbeb34f2944a584c16f507e75a6082e402[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Fri May 23 05:00:14 2025 -0400
+
+    chore: Add image and update README files with configuration instructions
+
+[33mcommit ac16ebd967c684092dd87593c55d0e36395aed44[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Fri May 23 04:13:57 2025 -0400
+
+    fix: bug fixed
+
+[33mcommit b7ce696304912b4651f92ae972db58300567194e[m
+Merge: 84bf2ae 73afd08
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Fri May 23 04:13:38 2025 -0400
+
+    Merge branch 'main' of https://github.com/wickedcode01/image-auto-generation
+
+[33mcommit 84bf2aed7a722a0b41318279f4674bd0ceeca31d[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Fri May 23 04:13:29 2025 -0400
+
+    fix: fix default regex bug
+
+[33mcommit 73afd08d61c897f9c279aa35fe96659c9e9fd9ff[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Thu May 22 02:57:14 2025 -0400
+
+    Update README.md
+
+[33mcommit df5353186932d32078e7a0d42e706348d7bb76bd[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Thu May 22 02:52:30 2025 -0400
+
+    Update README_CN.md
+
+[33mcommit 597b1cc30bbdbc6db36a99c95d086fe68666f620[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Thu May 22 02:19:28 2025 -0400
+
+    Update README_CN.md
+
+[33mcommit 6e82cf7f1fefe221aae0df10979edc1dc8620fb2[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Thu May 22 02:19:09 2025 -0400
+
+    Update README.md
+
+[33mcommit aaec4762c33081f2cd377adde8abec4cc59b5efe[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Thu May 22 02:10:50 2025 -0400
+
+    Update README.md
+
+[33mcommit ccf656666573dcd0ba4b5592a7fc15be53057a07[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Thu May 22 02:06:30 2025 -0400
+
+    Update README_CN.md
+
+[33mcommit 147cb6f2efcae588e3fc1c86c70b3a02a7296c7a[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Thu May 22 01:44:32 2025 -0400
+
+    Update README.md
+
+[33mcommit fe861597bde714262bcde2d64bf9a2bce01d873f[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Thu May 22 01:44:01 2025 -0400
+
+    Update README_CN.md
+
+[33mcommit 9f46a9735382d1f25f6bcf7ee7c54242da44b586[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Thu May 22 01:40:09 2025 -0400
+
+    Update README_CN.md
+
+[33mcommit 350ee940407a6343b76be4e82ed4c0fba7fc5ea0[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Thu May 22 01:39:39 2025 -0400
+
+    Update README_CN.md
+
+[33mcommit 0c3a2f4044c2a7784da9403a00416a57ded4b867[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Wed May 21 23:57:50 2025 -0400
+
+    Update README_CN.md
+
+[33mcommit 73070cafe94425ca86235d1d287f5e06dd32c5ba[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Wed May 21 23:57:13 2025 -0400
+
+    Update README.md
+
+[33mcommit 2dcd7e31e02f09c9fe20694fcd40dd6a099071c0[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Wed May 21 23:56:21 2025 -0400
+
+    feat: 更新readme
+
+[33mcommit cac97f9475d23178c701941bfdeda3ecb355b867[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Wed May 21 23:03:01 2025 -0400
+
+    feat: change default prompt
+
+[33mcommit b91844c514f5abf53e66499a04906a1d0d8ad643[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Wed May 21 22:42:33 2025 -0400
+
+    fix: update extension name
+
+[33mcommit e15ae5b43b40857edaf0f67eb8588411505b2099[m
+Merge: 537c858 879067c
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Wed May 21 21:50:58 2025 -0400
+
+    Merge branch 'main' of https://github.com/wickedcode01/image-auto-generation
+
+[33mcommit 537c858da91eb150c5d432ec3591253b579a973d[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Wed May 21 21:50:56 2025 -0400
+
+    feat: add i18n
+
+[33mcommit 879067cc1f8d596de07dcdcaaf11735c637f3abb[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Wed May 21 21:44:00 2025 -0400
+
+    Update README_CN.md
+
+[33mcommit 39d6e0294539a8c739a94fa4d4aed9c2c296b13a[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Wed May 21 21:43:48 2025 -0400
+
+    Update README.md
+
+[33mcommit b03d6dbf9dfaa679248d8bac780cfed6d13ccc96[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Wed May 21 21:35:25 2025 -0400
+
+    feat: update the generation api
+
+[33mcommit d6a4fe59416e428d16a7ad2c20905841faef7ecd[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 4 21:15:47 2025 -0400
+
+    fix: bugs fixed
+
+[33mcommit b5e02f4ff3325f9048bf350736aa7d552a3148a4[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 4 20:12:13 2025 -0400
+
+    feat: implement customized prompt and regular expression
+
+[33mcommit 232b57424d9a3ba8f9e640665718f3b919063e96[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 4 04:43:44 2025 -0400
+
+    fix: fix the issue that disable streaming api may cause rendering block
+
+[33mcommit aece6fcb8db8dadaf69a3ddd7f06b28cd873588f[m
+Merge: 8b4f54a ebf1dd8
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 4 04:02:50 2025 -0400
+
+    Merge branch 'main' of https://github.com/wickedcode01/image-auto-generation
+
+[33mcommit 8b4f54abcf28d85e15d76edc0f67cf8b806132b4[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 4 04:02:48 2025 -0400
+
+    fix: simplify drawer toggle handling by leveraging SillyTavern's built-in functionality
+
+[33mcommit ebf1dd898715d23fe36a4f85ecb7c8eedff91ed3[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Sun May 4 02:07:17 2025 -0400
+
+    Update README_CN.md
+
+[33mcommit e6e4cfec8739ff69002a50422ca252464d89bd9b[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Sun May 4 02:06:58 2025 -0400
+
+    Update README.md
+
+[33mcommit fe629cd45ab055f686ae8a3bcd3bc5e8411e538c[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Sun May 4 02:01:51 2025 -0400
+
+    Update README_CN.md
+
+[33mcommit fa66912c5525a79cc076e5a25ae983d8fb180047[m
+Author: JIMMY-YEN <wickedcode@outlook.com>
+Date:   Sun May 4 02:01:36 2025 -0400
+
+    Update README.md
+
+[33mcommit 6601409021ce80964c68ac78e21e453605a8f022[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 4 02:00:37 2025 -0400
+
+    doc: add README
+
+[33mcommit ac4feee28fa21ed7df785847d64262638d37c326[m
+Author: wickedcode <wickedcode@outlook.com>
+Date:   Sun May 4 01:38:16 2025 -0400
+
+    feat: first blood

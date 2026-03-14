@@ -1,0 +1,211 @@
+<style>
+    #image_auto_generation_container {
+        width: 100%;
+    }
+
+    #image_auto_generation_container .inline-drawer {
+        width: 100%;
+    }
+
+    #image_auto_generation_container .inline-drawer-content {
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    #image_auto_generation_container .prompt_phrase_row {
+        align-items: center;
+        width: 100%;
+    }
+
+    #image_auto_generation_container .prompt_phrase_text {
+        min-width: 0;
+    }
+
+    #image_auto_generation_container .stimg_checkbox_row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        gap: 10px;
+    }
+</style>
+
+<div class="inline-drawer">
+    <div class="inline-drawer-toggle inline-drawer-header">
+        <b data-i18n="Image Auto Generation">Image Auto Generation</b>
+        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+    </div>
+
+    <div class="inline-drawer-content">
+        <div class="flex-container flexnowrap">
+            <label for="image_generation_insert_type" class="flex1" data-i18n="Image Insert Type">
+                Image Insert Type
+            </label>
+
+            <select id="image_generation_insert_type" name="image_generation_insert_type" class="text_pole widthNatural margin0" autocomplete="off">
+                <option value="inline">Insert In Current Message</option>
+                <option value="new">Create New Message</option>
+                <option value="disabled">Disable</option>
+            </select>
+        </div>
+
+        <hr class="sysHR">
+
+        <div class="flex-container flexnowrap">
+            <div class="stimg_checkbox_row">
+                <span>Enable LLM Scene Analysis</span>
+                <input type="checkbox" id="llm_analysis_enabled" name="llm_analysis_enabled" class="checkbox" autocomplete="off">
+            </div>
+        </div>
+
+        <div>
+            <div>
+                <label for="llm_analysis_endpoint" class="flex1">
+                    Runpod Endpoint
+                </label>
+            </div>
+            <input id="llm_analysis_endpoint" name="llm_analysis_endpoint" class="text_pole" type="text" autocomplete="off"
+                placeholder="https://api.runpod.ai/v2/YOUR_ENDPOINT/runsync">
+        </div>
+
+        <div>
+            <div>
+                <label for="llm_analysis_api_key" class="flex1">
+                    Runpod API Key
+                </label>
+            </div>
+            <input id="llm_analysis_api_key" name="llm_analysis_api_key" class="text_pole" type="text" autocomplete="off" placeholder="rpa_xxxxxxxxx">
+        </div>
+
+        <div>
+            <div>
+                <label for="llm_analysis_model" class="flex1">
+                    LLM Model
+                </label>
+            </div>
+            <input id="llm_analysis_model" name="llm_analysis_model" class="text_pole" type="text" autocomplete="off" placeholder="thedrummer/cydonia-24b-v4.3">
+        </div>
+
+        <div>
+            <div>
+                <label for="llm_analysis_prompt_max_tokens" class="flex1">
+                    Prompt Max Tokens
+                </label>
+            </div>
+            <input id="llm_analysis_prompt_max_tokens" name="llm_analysis_prompt_max_tokens" class="text_pole" type="number" min="1" step="1" autocomplete="off"
+                placeholder="120">
+        </div>
+
+        <div>
+            <div>
+                <label for="llm_analysis_prompt_temperature" class="flex1">
+                    Prompt Temperature
+                </label>
+            </div>
+            <input id="llm_analysis_prompt_temperature" name="llm_analysis_prompt_temperature" class="text_pole" type="number" min="0" max="2" step="0.01" autocomplete="off"
+                placeholder="0.4">
+        </div>
+
+        <hr class="sysHR">
+
+        <div class="flex-container flexnowrap">
+            <div class="stimg_checkbox_row">
+                <span>Use Separate Classifier Backend</span>
+                <input type="checkbox" id="llm_analysis_classifier_separate" name="llm_analysis_classifier_separate" class="checkbox" autocomplete="off">
+            </div>
+        </div>
+
+        <div>
+            <div>
+                <label for="llm_analysis_classifier_backend" class="flex1">
+                    Classifier Backend
+                </label>
+            </div>
+            <select id="llm_analysis_classifier_backend" name="llm_analysis_classifier_backend" class="text_pole widthNatural margin0" autocomplete="off">
+                <option value="kobold">KoboldCPP</option>
+                <option value="runpod">Runpod</option>
+                <option value="openai">OpenAI-Compatible</option>
+            </select>
+        </div>
+
+        <div>
+            <div>
+                <label for="llm_analysis_classifier_endpoint" class="flex1">
+                    Classifier Endpoint
+                </label>
+            </div>
+            <input id="llm_analysis_classifier_endpoint" name="llm_analysis_classifier_endpoint" class="text_pole" type="text" autocomplete="off"
+                placeholder="http://127.0.0.1:5001/v1/chat/completions">
+        </div>
+
+        <div>
+            <div>
+                <label for="llm_analysis_classifier_api_key" class="flex1">
+                    Classifier API Key
+                </label>
+            </div>
+            <input id="llm_analysis_classifier_api_key" name="llm_analysis_classifier_api_key" class="text_pole" type="text" autocomplete="off"
+                placeholder="Optional for local KoboldCPP">
+        </div>
+
+        <div>
+            <div>
+                <label for="llm_analysis_classifier_model" class="flex1">
+                    Classifier Model
+                </label>
+            </div>
+            <input id="llm_analysis_classifier_model" name="llm_analysis_classifier_model" class="text_pole" type="text" autocomplete="off"
+                placeholder="Qwen/Qwen2.5-7B-Instruct">
+        </div>
+
+        <div>
+            <div>
+                <label for="llm_analysis_classifier_max_tokens" class="flex1">
+                    Classifier Max Tokens
+                </label>
+            </div>
+            <input id="llm_analysis_classifier_max_tokens" name="llm_analysis_classifier_max_tokens" class="text_pole" type="number" min="1" step="1" autocomplete="off"
+                placeholder="80">
+        </div>
+
+        <div>
+            <div>
+                <label for="llm_analysis_classifier_temperature" class="flex1">
+                    Classifier Temperature
+                </label>
+            </div>
+            <input id="llm_analysis_classifier_temperature" name="llm_analysis_classifier_temperature" class="text_pole" type="number" min="0" max="2" step="0.01" autocomplete="off"
+                placeholder="0.1">
+        </div>
+
+        <hr class="sysHR">
+
+        <div>
+            <div class="flex-container flexnowrap stimg_checkbox_row">
+                <input
+                    type="checkbox"
+                    id="llm_analysis_prompt_sanitizer_enabled"
+                    class="checkbox"
+                    autocomplete="off"
+                >
+                <label for="llm_analysis_prompt_sanitizer_enabled">
+                    Enable Prompt Sanitizer
+                </label>
+            </div>
+
+            <div class="flex-container flexnowrap flexGap10 alignitemscenter">
+                <label for="prompt_phrase_text_0" class="flex1">
+                    Prompt Phrases
+                </label>
+                <button id="prompt_item_add" class="menu_button" type="button">Add Item</button>
+                <button id="prompt_items_save" class="menu_button" type="button">Save Phrases</button>
+            </div>
+
+            <small id="prompt-phrases-help">
+                Phrases are concatenated in order before the generated image prompt. Click Save Phrases after editing text.
+            </small>
+
+            <div id="prompt_items_container" class="marginTop10" aria-describedby="prompt-phrases-help"></div>
+        </div>
+    </div>
+</div>
