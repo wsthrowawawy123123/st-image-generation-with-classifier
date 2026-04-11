@@ -28,6 +28,28 @@ test('tracks and ignores the expected next generated message index', () => {
     assert.equal(state.getPendingGeneratedImageMessage(), null);
 });
 
+test('ignores the expected next message even when the text is unrelated and no image is attached', () => {
+    const state = createImageGenerationState();
+    const now = 1_000;
+
+    state.beginPendingGeneratedImageMessage({
+        chatLength: 4,
+        sourceText: 'assistant reply',
+        prompt: 'prompt tags',
+        now,
+    });
+
+    const result = state.shouldIgnorePendingGeneratedImageMessage({
+        chatLength: 5,
+        message: { mes: 'totally unrelated assistant follow-up', extra: {} },
+        now: now + 250,
+    });
+
+    assert.equal(result.ignore, true);
+    assert.equal(result.reason, 'expected_index');
+    assert.equal(state.getPendingGeneratedImageMessage(), null);
+});
+
 test('ignores a pending generated message when image media is already attached', () => {
     const state = createImageGenerationState();
 

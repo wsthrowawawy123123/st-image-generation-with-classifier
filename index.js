@@ -12,6 +12,7 @@ import {
     createPromptPhraseItem,
     normalizePromptPhrases,
 } from './src/promptPhraseUtils.js';
+import { preprocessForImagePrompt } from './src/imagePromptText.js';
 import {
     createEmptySceneMemory,
     mergeScenePatch,
@@ -468,14 +469,6 @@ $(function () {
         });
     })();
 });
-
-function preprocessForImagePrompt(text) {
-    let cleaned = (text || '').trim();
-    cleaned = cleaned.replace(/"[^"]*"/g, ' ');
-    cleaned = cleaned.replace(/“[^”]*”/g, ' ');
-    cleaned = cleaned.replace(/\s+/g, ' ').trim();
-    return cleaned;
-}
 
 function getImageAnalysisTextContext(context) {
     const { latestAssistant, latestUser, previousAssistant } =
