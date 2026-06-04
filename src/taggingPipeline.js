@@ -52,16 +52,43 @@ function extractContinuityAnchorValues(continuitySource) {
     if (continuitySource.characters && typeof continuitySource.characters === 'object') {
         const character = continuitySource.characters.character || {};
 
-        const parts = [
-            ...(Array.isArray(character.prompt_details) ? character.prompt_details : []),
-            ...(Array.isArray(continuitySource.continuity_facts) ? continuitySource.continuity_facts : []),
+        const promptDetails = Array.isArray(character.prompt_details)
+            ? character.prompt_details
+            : [];
 
-            typeof character.attire === 'string' ? character.attire.trim() : '',
-            typeof character.clothing_state === 'string' &&
-                character.clothing_state !== 'unknown' &&
-                character.clothing_state !== 'normal'
-                ? `${character.clothing_state.trim()} clothing`
+        const continuityFacts = Array.isArray(continuitySource.continuity_facts)
+            ? continuitySource.continuity_facts
+            : [];
+
+        const specificClothingDetails = [...promptDetails, ...continuityFacts]
+            .map(value => String(value || '').trim())
+            .filter(Boolean)
+            .filter(value => value !== 'unknown' && value !== 'none');
+
+        const hasSpecificClothingDetails = specificClothingDetails.length > 0;
+
+        const characterAttire =
+            typeof character.attire === 'string'
+                ? character.attire.trim()
+                : '';
+
+        const characterClothingState =
+            typeof character.clothing_state === 'string'
+                ? character.clothing_state.trim()
+                : '';
+
+        const parts = [
+            ...specificClothingDetails,
+
+            !hasSpecificClothingDetails ? characterAttire : '',
+
+            !hasSpecificClothingDetails &&
+                characterClothingState &&
+                characterClothingState !== 'unknown' &&
+                characterClothingState !== 'normal'
+                ? `${characterClothingState} clothing`
                 : '',
+
             typeof character.pose === 'string' ? character.pose.trim() : '',
             ...(Array.isArray(character.state) ? character.state : []),
 
