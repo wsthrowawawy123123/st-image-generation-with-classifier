@@ -60,30 +60,43 @@
 
         <div>
             <div>
+                <label for="llm_analysis_backend" class="flex1">
+                    Scene Analysis Backend
+                </label>
+            </div>
+            <select id="llm_analysis_backend" name="llm_analysis_backend" class="text_pole widthNatural margin0" autocomplete="off">
+                <option value="kobold">KoboldCPP</option>
+                <option value="runpod">Runpod</option>
+                <option value="openai">OpenAI-Compatible</option>
+            </select>
+        </div>
+
+        <div>
+            <div>
                 <label for="llm_analysis_endpoint" class="flex1">
-                    Runpod Endpoint
+                    Scene Analysis Endpoint
                 </label>
             </div>
             <input id="llm_analysis_endpoint" name="llm_analysis_endpoint" class="text_pole" type="text" autocomplete="off"
-                placeholder="https://api.runpod.ai/v2/YOUR_ENDPOINT/runsync">
+                placeholder="http://127.0.0.1:5001/v1/chat/completions">
         </div>
 
         <div>
             <div>
                 <label for="llm_analysis_api_key" class="flex1">
-                    Runpod API Key
+                    Scene Analysis API Key
                 </label>
             </div>
-            <input id="llm_analysis_api_key" name="llm_analysis_api_key" class="text_pole" type="text" autocomplete="off" placeholder="rpa_xxxxxxxxx">
+            <input id="llm_analysis_api_key" name="llm_analysis_api_key" class="text_pole" type="text" autocomplete="off" placeholder="Optional for local KoboldCPP">
         </div>
 
         <div>
             <div>
                 <label for="llm_analysis_model" class="flex1">
-                    LLM Model
+                    Scene Analysis Model
                 </label>
             </div>
-            <input id="llm_analysis_model" name="llm_analysis_model" class="text_pole" type="text" autocomplete="off" placeholder="thedrummer/cydonia-24b-v4.3">
+            <input id="llm_analysis_model" name="llm_analysis_model" class="text_pole" type="text" autocomplete="off" placeholder="Optional if your endpoint does not require a model field">
         </div>
 
         <div>

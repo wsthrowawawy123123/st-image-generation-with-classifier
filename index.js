@@ -12,7 +12,10 @@ import {
     createPromptPhraseItem,
     normalizePromptPhrases,
 } from './src/promptPhraseUtils.js';
-import { preprocessForImagePrompt } from './src/imagePromptText.js';
+import {
+    preprocessForImagePrompt,
+    buildFallbackSceneTags,
+} from './src/imagePromptText.js';
 import {
     createEmptySceneMemory,
     mergeScenePatch,
@@ -138,9 +141,10 @@ const defaultSettings = {
     promptPhrases: [],
     llmAnalysis: {
         enabled: true,
+        backend: 'kobold',
         endpoint: '',
         apiKey: '',
-        model: 'thedrummer/cydonia-24b-v4.3',
+        model: '',
         promptMaxTokens: 120,
         promptTemperature: 0.4,
         promptSanitizer: {
@@ -182,6 +186,9 @@ function updateUI() {
         $('#llm_analysis_enabled').prop(
             'checked',
             extension_settings[extensionName].llmAnalysis.enabled,
+        );
+        $('#llm_analysis_backend').val(
+            extension_settings[extensionName].llmAnalysis.backend,
         );
         $('#llm_analysis_endpoint').val(
             extension_settings[extensionName].llmAnalysis.endpoint,
@@ -298,6 +305,11 @@ async function createSettings(settingsHtml) {
 
     $('#llm_analysis_enabled').on('change', function () {
         extension_settings[extensionName].llmAnalysis.enabled = $(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#llm_analysis_backend').on('change', function () {
+        extension_settings[extensionName].llmAnalysis.backend = $(this).val();
         saveSettingsDebounced();
     });
 
@@ -482,6 +494,26 @@ function getImageAnalysisTextContext(context) {
         latestUserText: preprocessForImagePrompt(latestUser),
         previousAssistantText: preprocessForImagePrompt(previousAssistant),
     };
+}
+
+function hasConfiguredEndpoint(endpoint) {
+    return typeof endpoint === 'string' && endpoint.trim().length > 0;
+}
+
+function canUseLlmPromptBuilder(settings) {
+    return hasConfiguredEndpoint(settings?.endpoint);
+}
+
+function canUseLlmClassifier(settings) {
+    if (settings?.enabled !== true) {
+        return false;
+    }
+
+    if (settings.classifierUseSeparateBackend === true) {
+        return hasConfiguredEndpoint(settings.classifierEndpoint || settings.endpoint);
+    }
+
+    return canUseLlmPromptBuilder(settings);
 }
 
 function normalizeScenePatch(parsed) {
@@ -764,14 +796,15 @@ async function handleIncomingMessage() {
         currentIndex,
     });
 
-    if (!extension_settings[extensionName]?.llmAnalysis?.enabled) {
-        console.log(`[${extensionName}] LLM analysis disabled, stopping after processed marker`, {
-            currentIndex,
-        });
-        return;
-    }
-
-    const { latestUserText: userText } = getImageAnalysisTextContext(context);
+    const llmSettings = extension_settings[extensionName]?.llmAnalysis || {};
+    const canUsePromptBuilder = canUseLlmPromptBuilder(llmSettings);
+    const canUseClassifier = canUseLlmClassifier(llmSettings);
+    const {
+        latestUserText: userText,
+        assistantText,
+    } = getImageAnalysisTextContext(context);
+    const explicitPhotoRequest = PHOTO_REQUEST_REGEX.test(userText);
+    const fallbackSceneTags = buildFallbackSceneTags(assistantText);
 
     let sceneEval = {
         generate: false,
@@ -779,42 +812,85 @@ async function handleIncomingMessage() {
         weight: 0,
     };
 
-    try {
-        isImageAnalysisCall = true;
-
-        if (extension_settings[extensionName]?.llmAnalysis?.sceneMemory?.enabled) {
-            const patch = await extractScenePatch(context);
-            console.log(`[${extensionName}] scene memory before merge`, structuredClone(sceneMemory));
-            console.log(`[${extensionName}] scene patch before merge`, structuredClone(patch));
-            mergeScenePatch(sceneMemory, patch);
-            console.log(`[${extensionName}] scene memory after merge`, structuredClone(sceneMemory));
-        }
-
-        sceneEval = await classifyReplyForImage(context);
-
-        if (PHOTO_REQUEST_REGEX.test(userText)) {
-            sceneEval.generate = true;
-            sceneEval.weight = 1.0;
-            sceneEval.category = 'explicit_request';
-        }
-
-        if (sceneEval.category === 'nsfw_action') {
-            sceneEval.weight = Math.max(sceneEval.weight, 0.9);
-        }
-
-        if (sceneEval.category === 'physical_interaction') {
-            sceneEval.weight = Math.min(sceneEval.weight, 0.82);
-        }
-
-        console.log(`[${extensionName}] scene eval`, {
-            sceneEval,
-            preview: message.mes.slice(0, 200),
+    if (!llmSettings.enabled) {
+        sceneEval = {
+            generate: Boolean(fallbackSceneTags),
+            category: explicitPhotoRequest ? 'explicit_request' : 'fallback_reply',
+            weight: 1,
+        };
+        console.log(`[${extensionName}] LLM analysis disabled, using reply text fallback`, {
+            currentIndex,
+            explicitPhotoRequest,
+            fallbackSceneTags,
         });
-    } catch (error) {
-        console.error(`[${extensionName}] scene analysis failed`, error);
-        return;
-    } finally {
-        isImageAnalysisCall = false;
+    } else if (!canUseClassifier && !canUsePromptBuilder) {
+        sceneEval = {
+            generate: Boolean(fallbackSceneTags),
+            category: explicitPhotoRequest ? 'explicit_request' : 'fallback_reply',
+            weight: 1,
+        };
+        console.warn(`[${extensionName}] missing LLM endpoints, using reply text fallback`, {
+            currentIndex,
+            explicitPhotoRequest,
+            fallbackSceneTags,
+        });
+    } else {
+        try {
+            isImageAnalysisCall = true;
+
+            if (canUsePromptBuilder && llmSettings.sceneMemory?.enabled) {
+                const patch = await extractScenePatch(context);
+                console.log(`[${extensionName}] scene memory before merge`, structuredClone(sceneMemory));
+                console.log(`[${extensionName}] scene patch before merge`, structuredClone(patch));
+                mergeScenePatch(sceneMemory, patch);
+                console.log(`[${extensionName}] scene memory after merge`, structuredClone(sceneMemory));
+            }
+
+            if (canUseClassifier) {
+                sceneEval = await classifyReplyForImage(context);
+            }
+
+            if (explicitPhotoRequest) {
+                sceneEval.generate = true;
+                sceneEval.weight = 1.0;
+                sceneEval.category = 'explicit_request';
+            }
+
+            if (!canUseClassifier) {
+                sceneEval.generate = Boolean(fallbackSceneTags);
+                sceneEval.weight = fallbackSceneTags ? 1 : 0;
+                sceneEval.category = explicitPhotoRequest ? 'explicit_request' : 'fallback_reply';
+            }
+
+            if (sceneEval.category === 'nsfw_action') {
+                sceneEval.weight = Math.max(sceneEval.weight, 0.9);
+            }
+
+            if (sceneEval.category === 'physical_interaction') {
+                sceneEval.weight = Math.min(sceneEval.weight, 0.82);
+            }
+
+            console.log(`[${extensionName}] scene eval`, {
+                sceneEval,
+                preview: message.mes.slice(0, 200),
+            });
+        } catch (error) {
+            console.error(`[${extensionName}] scene analysis failed`, error);
+
+            sceneEval = {
+                generate: Boolean(fallbackSceneTags),
+                category: explicitPhotoRequest ? 'explicit_request' : 'fallback_reply',
+                weight: fallbackSceneTags ? 1 : 0,
+            };
+
+            console.warn(`[${extensionName}] falling back to reply text after analysis failure`, {
+                currentIndex,
+                explicitPhotoRequest,
+                fallbackSceneTags,
+            });
+        } finally {
+            isImageAnalysisCall = false;
+        }
     }
 
     if (!sceneEval.generate) {
@@ -867,24 +943,36 @@ async function handleIncomingMessage() {
 
     let sceneTags = '';
 
-    try {
-        isImageAnalysisCall = true;
-        sceneTags = await generateImageTagFromReply(context);
-        console.log(`[${extensionName}] scene builder raw output`, sceneTags);
+    if (!canUsePromptBuilder) {
+        sceneTags = fallbackSceneTags;
+        console.log(`[${extensionName}] using fallback scene tags because prompt builder is unavailable`, {
+            currentIndex,
+            sceneTags,
+        });
+    } else {
+        try {
+            isImageAnalysisCall = true;
+            sceneTags = await generateImageTagFromReply(context);
+            console.log(`[${extensionName}] scene builder raw output`, sceneTags);
 
-        if (extension_settings[extensionName]?.llmAnalysis?.promptSanitizer?.enabled) {
-            const sanitizedSceneTags = await sanitizeImagePrompt(sceneTags, context);
-            console.log(`[${extensionName}] scene builder sanitized output`, {
-                rawSceneTags: sceneTags,
-                sanitizedSceneTags,
+            if (extension_settings[extensionName]?.llmAnalysis?.promptSanitizer?.enabled) {
+                const sanitizedSceneTags = await sanitizeImagePrompt(sceneTags, context);
+                console.log(`[${extensionName}] scene builder sanitized output`, {
+                    rawSceneTags: sceneTags,
+                    sanitizedSceneTags,
+                });
+                sceneTags = sanitizedSceneTags || sceneTags;
+            }
+        } catch (error) {
+            console.error(`[${extensionName}] scene builder failed`, error);
+            sceneTags = fallbackSceneTags;
+            console.warn(`[${extensionName}] using fallback scene tags after scene builder failure`, {
+                currentIndex,
+                sceneTags,
             });
-            sceneTags = sanitizedSceneTags || sceneTags;
+        } finally {
+            isImageAnalysisCall = false;
         }
-    } catch (error) {
-        console.error(`[${extensionName}] scene builder failed`, error);
-        return;
-    } finally {
-        isImageAnalysisCall = false;
     }
 
     if (!sceneTags || !sceneTags.trim()) {

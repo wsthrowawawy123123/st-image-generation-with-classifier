@@ -1,4 +1,24 @@
 export function createChatCaller({ extensionName, getSettings }) {
+    function resolveBackendConfig(settings, options = {}) {
+        const useClassifierBackend = options.useClassifierBackend === true;
+
+        if (useClassifierBackend && settings.classifierUseSeparateBackend === true) {
+            return {
+                backend: settings.classifierBackend || settings.backend || 'kobold',
+                endpoint: settings.classifierEndpoint || settings.endpoint,
+                apiKey: settings.classifierApiKey || settings.apiKey,
+                model: settings.classifierModel || settings.model,
+            };
+        }
+
+        return {
+            backend: settings.backend || 'kobold',
+            endpoint: settings.endpoint,
+            apiKey: settings.apiKey,
+            model: settings.model,
+        };
+    }
+
     async function callRunpodBackend(endpoint, apiKey, model, messages, options = {}) {
         const settings = getSettings();
         const max_tokens = options.max_tokens ?? settings.promptMaxTokens ?? 120;
@@ -160,23 +180,12 @@ export function createChatCaller({ extensionName, getSettings }) {
 
     return async function callChat(messages, options = {}) {
         const settings = getSettings();
-        const useClassifierBackend = options.useClassifierBackend === true;
-
-        const backend = useClassifierBackend
-            ? (settings.classifierBackend || 'kobold')
-            : 'runpod';
-
-        const endpoint = useClassifierBackend
-            ? (settings.classifierEndpoint || settings.endpoint)
-            : settings.endpoint;
-
-        const apiKey = useClassifierBackend
-            ? (settings.classifierApiKey || settings.apiKey)
-            : settings.apiKey;
-
-        const model = useClassifierBackend
-            ? (settings.classifierModel || settings.model)
-            : settings.model;
+        const {
+            backend,
+            endpoint,
+            apiKey,
+            model,
+        } = resolveBackendConfig(settings, options);
 
         if (!endpoint) {
             throw new Error(`Missing endpoint for backend: ${backend}`);
