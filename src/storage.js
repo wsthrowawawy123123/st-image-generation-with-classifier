@@ -1,5 +1,5 @@
 const DB_NAME = 'st-scene-tagger';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const STORE_SCENES = 'scenes';
 const STORE_SETTINGS = 'settings';
