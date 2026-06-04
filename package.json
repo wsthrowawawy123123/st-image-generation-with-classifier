@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node test/imageGenerationState.test.js && node test/promptPhraseUtils.test.js && node test/sceneMemory.test.js && node test/analysisPipeline.test.js && node test/memory.test.js && node test/canonUserMemory.test.js && node test/search.test.js && node test/imagePromptText.test.js && node test/chatBackends.test.js"
+    "test": "node test/imageGenerationState.test.js && node test/promptPhraseUtils.test.js && node test/analysisPipeline.test.js && node test/memory.test.js && node test/canonUserMemory.test.js && node test/search.test.js && node test/imagePromptText.test.js && node test/chatBackends.test.js"
   }
 }

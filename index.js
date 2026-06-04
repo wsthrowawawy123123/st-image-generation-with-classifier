@@ -16,10 +16,6 @@ import {
     preprocessForImagePrompt,
     buildFallbackSceneTags,
 } from './src/imagePromptText.js';
-import {
-    createEmptySceneMemory,
-    mergeScenePatch,
-} from './src/sceneMemory.js';
 import { createChatCaller } from './src/chatBackends.js';
 import {
     applyContinuityMemoryToCurrentState,
@@ -84,7 +80,6 @@ const PHOTO_REQUEST_REGEX =
 
 let isImageAnalysisCall = false;
 const imageGenerationState = createImageGenerationState();
-let sceneMemory = createEmptySceneMemory();
 let sceneTaggerUi = null;
 const sceneTaggerState = {
     scenes: [],
@@ -637,9 +632,6 @@ const defaultSettings = {
         cooldown: {
             enabled: true,
             messages: 2,
-        },
-        sceneMemory: {
-            enabled: true,
         },
     },
 };
@@ -1543,22 +1535,6 @@ function canUseLlmClassifier(settings) {
     return canUseLlmPromptBuilder(settings);
 }
 
-function normalizeScenePatch(parsed) {
-    return {
-        location: typeof parsed?.location === 'string' ? parsed.location.trim() : '',
-        environment: typeof parsed?.environment === 'string' ? parsed.environment.trim() : '',
-        assistantPose: typeof parsed?.assistantPose === 'string' ? parsed.assistantPose.trim() : '',
-        assistantClothing: typeof parsed?.assistantClothing === 'string' ? parsed.assistantClothing.trim() : '',
-        assistantExpression: typeof parsed?.assistantExpression === 'string' ? parsed.assistantExpression.trim() : '',
-        interaction: typeof parsed?.interaction === 'string' ? parsed.interaction.trim() : '',
-        props: Array.isArray(parsed?.props)
-            ? parsed.props.filter(x => typeof x === 'string').map(x => x.trim()).filter(Boolean)
-            : [],
-        lighting: typeof parsed?.lighting === 'string' ? parsed.lighting.trim() : '',
-        mood: typeof parsed?.mood === 'string' ? parsed.mood.trim() : '',
-    };
-}
-
 const callChat = createChatCaller({
     extensionName,
     getSettings: getLlmSettings,
@@ -1566,12 +1542,10 @@ const callChat = createChatCaller({
 
 const {
     classifyReplyForImage,
-    extractScenePatch,
 } = createAnalysisPipeline({
     extensionName,
     getSettings: getLlmSettings,
     getImageAnalysisTextContext,
-    normalizeScenePatch,
     callChat,
 });
 
@@ -1917,6 +1891,7 @@ async function handleIncomingMessage() {
         category: 'dialogue_only',
         weight: 0,
     };
+    let continuityStateForImage = null;
 
     if (!llmSettings.enabled) {
         sceneEval = {
@@ -1945,14 +1920,7 @@ async function handleIncomingMessage() {
             isImageAnalysisCall = true;
             const { chatId, characterId } = getChatIdentity(context);
             const currentState = await getCurrentState(chatId);
-
-            if (canUsePromptBuilder && llmSettings.sceneMemory?.enabled) {
-                const patch = await extractScenePatch(context);
-                console.log(`[${extensionName}] scene memory before merge`, structuredClone(sceneMemory));
-                console.log(`[${extensionName}] scene patch before merge`, structuredClone(patch));
-                mergeScenePatch(sceneMemory, patch);
-                console.log(`[${extensionName}] scene memory after merge`, structuredClone(sceneMemory));
-            }
+            continuityStateForImage = currentState;
 
             if (canUseClassifier) {
                 sceneEval = await classifyReplyForImage(context, {
@@ -1970,7 +1938,8 @@ async function handleIncomingMessage() {
                 extension_settings[extensionName]?.sceneTagger?.autoSaveGeneratedScenes !== false &&
                 sceneEval?.sceneRecord
             ) {
-                await persistSceneRecord(sceneEval.sceneRecord, currentState);
+                const persisted = await persistSceneRecord(sceneEval.sceneRecord, currentState);
+                continuityStateForImage = persisted?.currentState || continuityStateForImage;
                 await refreshSceneTaggerRecords();
             }
 
@@ -2052,8 +2021,7 @@ async function handleIncomingMessage() {
         generate: sceneEval.generate,
         weight: sceneEval.weight,
         roll: sceneWeightRoll,
-        sceneMemoryEnabled: extension_settings[extensionName]?.llmAnalysis?.sceneMemory?.enabled === true,
-        sceneMemory: structuredClone(sceneMemory),
+        continuityStateForImage,
     });
 
     if (sceneWeightRoll > sceneEval.weight) {
@@ -2068,12 +2036,13 @@ async function handleIncomingMessage() {
     let sceneTags = '';
 
     if (Array.isArray(sceneEval.imageTags) && sceneEval.imageTags.length > 0) {
-        sceneTags = imageTagsToSceneTags(sceneEval.imageTags, sceneMemory);
+        sceneTags = imageTagsToSceneTags(sceneEval.imageTags, continuityStateForImage);
         console.log(`[${extensionName}] using image tags from router pipeline`, {
             currentIndex,
             imageTags: sceneEval.imageTags,
             normalized: sceneEval.normalized,
             safetyTags: sceneEval.safetyTags,
+            continuityStateForImage,
             sceneTags,
         });
     } else {

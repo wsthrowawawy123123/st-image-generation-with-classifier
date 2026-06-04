@@ -61,15 +61,14 @@ export function safeParseJsonObject(raw) {
     return null;
 }
 
-export function normalizedTagsToSceneTags(normalizedTags, sceneMemory = null, rawExtraction = null) {
-    return imageTagsToSceneTags(buildImageTags({ normalized_tags: normalizedTags }, rawExtraction), sceneMemory);
+export function normalizedTagsToSceneTags(normalizedTags, continuitySource = null, rawExtraction = null) {
+    return imageTagsToSceneTags(buildImageTags({ normalized_tags: normalizedTags }, rawExtraction), continuitySource);
 }
 
 export function createAnalysisPipeline({
     extensionName,
     getSettings,
     getImageAnalysisTextContext,
-    normalizeScenePatch,
     callChat,
 }) {
     function mapSceneRecordToSceneEval(sceneRecord) {
@@ -171,83 +170,8 @@ ${assistantText}`,
 
         return sceneEval;
     }
-
-    async function extractScenePatch(context) {
-        const settings = getSettings();
-        const {
-            assistantText,
-            previousAssistantText: prevAssistantText,
-        } = getImageAnalysisTextContext(context);
-
-        const patchPrompt = `Extract the current visual scene state update from the CURRENT assistant reply.
-
-        Return JSON only with this exact schema:
-        {
-        "location": "",
-        "environment": "",
-        "assistantPose": "",
-        "assistantClothing": "",
-        "assistantExpression": "",
-        "interaction": "",
-        "props": [],
-        "lighting": "",
-        "mood": ""
-        }
-
-        Rules:
-        - Return only changed or newly introduced fields from the CURRENT assistant reply.
-        - Do not restate, rephrase, summarize, or paraphrase details that are already part of the ongoing scene unless the CURRENT assistant reply clearly changes them.
-        - Only include fields that are explicitly stated or strongly implied by the CURRENT assistant reply.
-        - If a field did not clearly change or is unclear, leave it as an empty string, or [] for props.
-        - Treat assistantClothing, location, environment, and lighting as sticky fields that should change only with clear explicit evidence in the CURRENT assistant reply.
-        - Do not convert the same scene detail into new wording just because it was described differently.
-        - Do not invent details.
-        - Use Previous assistant context only to resolve ambiguity.
-        - Respond with JSON only.
-        - Do not include markdown fences.
-        - Do not include explanation text.
-
-        Previous assistant context:
-        ${prevAssistantText || '(none)'}
-
-        Current assistant reply:
-        ${assistantText}`;
-
-        const result = await callChat(
-            [
-                {
-                    role: 'system',
-                    content: 'You extract visual scene state updates. Return only valid JSON.',
-                },
-                {
-                    role: 'user',
-                    content: patchPrompt,
-                },
-            ],
-            {
-                useClassifierBackend: settings.classifierUseSeparateBackend === true,
-                max_tokens: settings.classifierMaxTokens ?? 80,
-                temperature: settings.classifierTemperature ?? 0.1,
-            },
-        );
-
-        console.log(`[${extensionName}] extracted scene patch raw`, result);
-
-        const parsed = safeParseJsonObject(result);
-
-        if (!parsed) {
-            console.warn(`[${extensionName}] failed to parse scene patch JSON`, result);
-            return null;
-        }
-
-        console.log(`[${extensionName}] extracted scene patch parsed`, parsed);
-
-        return normalizeScenePatch(parsed);
-    }
-
     return {
         classifyReplyForImage,
-        extractScenePatch,
         buildMemoryEvent,
         applyContinuityMemoryToCurrentState,
     };

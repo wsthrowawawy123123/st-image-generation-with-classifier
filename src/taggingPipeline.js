@@ -3,7 +3,43 @@ import { parseContinuityMemoryOutput, parseLabeledFields, parseRawExtractionFiel
 import { PROMPT_VERSION } from './labels.js';
 import { normalizeNormalizedTags, normalizeRouterResult, normalizeSafetyTags, validateNormalizedTags, validateSafetyTags } from './validator.js';
 
-export function injectConsistencyAnchorTags(rawTags, sceneMemory) {
+function extractContinuityAnchorValues(continuitySource) {
+    if (!continuitySource || typeof continuitySource !== 'object') {
+        return [];
+    }
+
+    if (
+        continuitySource.characters &&
+        typeof continuitySource.characters === 'object'
+    ) {
+        const character = continuitySource.characters.character || {};
+        const parts = [
+            typeof character.attire === 'string' ? character.attire.trim() : '',
+            typeof character.clothing_state === 'string' && character.clothing_state !== 'unknown' && character.clothing_state !== 'normal'
+                ? `${character.clothing_state.trim()} clothing`
+                : '',
+            typeof character.pose === 'string' ? character.pose.trim() : '',
+            ...(Array.isArray(character.state) ? character.state : []),
+            typeof continuitySource.current_location === 'string' ? continuitySource.current_location.trim() : '',
+            typeof continuitySource.current_setting === 'string' ? continuitySource.current_setting.trim() : '',
+        ];
+
+        return parts.filter(Boolean).filter(value => value !== 'unknown');
+    }
+
+    return [
+        typeof continuitySource.assistantClothing === 'string' ? continuitySource.assistantClothing.trim() : '',
+        typeof continuitySource.assistantPose === 'string' ? continuitySource.assistantPose.trim() : '',
+        typeof continuitySource.assistantExpression === 'string' ? continuitySource.assistantExpression.trim() : '',
+        typeof continuitySource.interaction === 'string' ? continuitySource.interaction.trim() : '',
+        typeof continuitySource.environment === 'string' ? continuitySource.environment.trim() : '',
+        typeof continuitySource.location === 'string' ? continuitySource.location.trim() : '',
+        typeof continuitySource.lighting === 'string' ? continuitySource.lighting.trim() : '',
+        ...(Array.isArray(continuitySource.props) ? continuitySource.props : []),
+    ].filter(Boolean);
+}
+
+export function injectConsistencyAnchorTags(rawTags, continuitySource) {
     const cleanedTags = typeof rawTags === 'string'
         ? rawTags.trim().replace(/^["']|["']$/g, '')
         : '';
@@ -14,10 +50,7 @@ export function injectConsistencyAnchorTags(rawTags, sceneMemory) {
 
     const seen = new Set(parts.map(tag => tag.toLowerCase()));
     const normalizedWholeString = cleanedTags.toLowerCase();
-    const consistencyAnchors = [
-        typeof sceneMemory?.assistantClothing === 'string' ? sceneMemory.assistantClothing.trim() : '',
-        typeof sceneMemory?.assistantPose === 'string' ? sceneMemory.assistantPose.trim() : '',
-    ].filter(Boolean);
+    const consistencyAnchors = extractContinuityAnchorValues(continuitySource);
 
     for (const anchor of consistencyAnchors.reverse()) {
         const normalized = anchor.toLowerCase();
@@ -94,7 +127,7 @@ export function buildImageTags(sceneOrNormalized, rawExtraction = null) {
     return [...new Set(tags)];
 }
 
-export function imageTagsToSceneTags(imageTags, sceneMemory = null) {
+export function imageTagsToSceneTags(imageTags, continuitySource = null) {
     if (!Array.isArray(imageTags)) {
         return '';
     }
@@ -106,7 +139,7 @@ export function imageTagsToSceneTags(imageTags, sceneMemory = null) {
             .filter(value => value && value !== 'unknown' && value !== 'none'),
     )];
 
-    return injectConsistencyAnchorTags(deduped.join(', '), sceneMemory);
+    return injectConsistencyAnchorTags(deduped.join(', '), continuitySource);
 }
 
 export function buildMemoryEvent(scene, currentState = null) {

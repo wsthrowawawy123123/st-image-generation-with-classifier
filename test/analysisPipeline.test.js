@@ -195,23 +195,36 @@ test('injectConsistencyAnchorTags prepends stable clothing and pose when missing
         injectConsistencyAnchorTags(
             'soft smile, warm lighting, office desk',
             {
-                assistantClothing: 'white blouse, blue jeans',
-                assistantPose: 'sitting pose',
+                characters: {
+                    character: {
+                        attire: 'white blouse',
+                        clothing_state: 'open',
+                        pose: 'sitting pose',
+                        state: ['soft smile'],
+                    },
+                },
+                current_location: 'office desk',
+                current_setting: 'office',
             },
         ),
-        'white blouse, blue jeans, sitting pose, soft smile, warm lighting, office desk',
+        'white blouse, open clothing, sitting pose, soft smile, warm lighting, office desk',
     );
 });
 
 test('injectConsistencyAnchorTags does not duplicate clothing or pose already present', () => {
     assert.equal(
         injectConsistencyAnchorTags(
-            'white blouse, blue jeans, sitting pose, soft smile',
+            'white blouse, open clothing, sitting pose, soft smile',
             {
-                assistantClothing: 'white blouse, blue jeans',
-                assistantPose: 'sitting pose',
+                characters: {
+                    character: {
+                        attire: 'white blouse',
+                        clothing_state: 'open',
+                        pose: 'sitting pose',
+                    },
+                },
             },
         ),
-        'white blouse, blue jeans, sitting pose, soft smile',
+        'white blouse, open clothing, sitting pose, soft smile',
     );
 });
