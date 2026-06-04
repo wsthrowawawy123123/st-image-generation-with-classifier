@@ -21,7 +21,36 @@ import {
     mergeScenePatch,
 } from './src/sceneMemory.js';
 import { createChatCaller } from './src/chatBackends.js';
-import { createAnalysisPipeline } from './src/analysisPipeline.js';
+import {
+    applyContinuityMemoryToCurrentState,
+    buildContinuityMemoryBlock,
+    createAnalysisPipeline,
+    imageTagsToSceneTags,
+} from './src/analysisPipeline.js';
+import { DEFAULT_CURRENT_STATE, DEFAULT_MEMORY_SETTINGS } from './src/memory.js';
+import { registerPromptInjection, runPromptInjection } from './src/memoryInjectionAdapter.js';
+import {
+    archiveOldScenes,
+    cleanupArchivedSourceText,
+    clearScenes,
+    clearAllCurrentStates,
+    clearCurrentState,
+    compactChatScenes,
+    deleteScene,
+    exportScenes,
+    getAllScenes,
+    getCurrentState,
+    getMemoryContextForChat,
+    getStorageUsage,
+    importScenes,
+    initDb,
+    requestPersistentStorage,
+    saveCurrentState,
+    saveMemoryEvent,
+    saveScene,
+} from './src/storage.js';
+import { filterBySafety, filterScenes, rawSearch } from './src/search.js';
+import { createSceneTaggerUi } from './src/ui.js';
 
 const extensionName = 'st-image-generation-with-classifier';
 const extensionFolderPath = `/scripts/extensions/third-party/${extensionName}`;
@@ -39,7 +68,38 @@ const PHOTO_REQUEST_REGEX =
 let isImageAnalysisCall = false;
 const imageGenerationState = createImageGenerationState();
 let sceneMemory = createEmptySceneMemory();
+let sceneTaggerUi = null;
+const sceneTaggerState = {
+    scenes: [],
+    filteredScenes: [],
+    selectedSceneId: '',
+    status: 'Ready',
+    memorySettings: structuredClone(DEFAULT_MEMORY_SETTINGS),
+    memoryDebug: {
+        currentState: null,
+        lastInjectedMemoryBlock: '',
+        lastUpdatedTimestamp: '',
+        lastSourceSceneId: '',
+        lastParserWarning: '',
+        storageUsage: null,
+    },
+    filters: {
+        content: '',
+        action_group: '',
+        action: '',
+        pose: '',
+        exposure: '',
+        contact: '',
+        attire: '',
+        setting: '',
+        age: '',
+        consent: '',
+        risk: '',
+        search: '',
+    },
+};
 const getLlmSettings = () => extension_settings[extensionName]?.llmAnalysis || {};
+const getMemorySettings = () => extension_settings[extensionName]?.continuityMemory || {};
 const BUILT_IN_PREFIX_PATHS = [
     ['sd', 'common_prefix'],
     ['sd', 'prompt_prefix'],
@@ -186,10 +246,252 @@ function buildPromptFromPhrases(sceneTags) {
     );
 }
 
+function getChatIdentity(context) {
+    return {
+        chatId: String(
+            context.chatId ||
+            context.groupId ||
+            context.characterId ||
+            context.name2 ||
+            'current-chat',
+        ),
+        characterId: String(
+            context.characterId ||
+            context.name2 ||
+            context.groupId ||
+            'current-character',
+        ),
+    };
+}
+
+function formatMessageForSceneTagging(message) {
+    const role = message?.is_user ? 'User' : 'Assistant';
+    const text = preprocessForImagePrompt(message?.mes || '');
+    return `${role}: ${text}`;
+}
+
+function buildSourceTextFromRange(chat, startIndex, endIndex) {
+    return (chat || [])
+        .slice(startIndex, endIndex + 1)
+        .map(formatMessageForSceneTagging)
+        .filter(Boolean)
+        .join('\n\n');
+}
+
+function getSelectedMessageRange() {
+    const selectedIds = $('.mes.selected').map(function () {
+        const raw = $(this).attr('mesid');
+        return Number(raw);
+    }).get().filter(Number.isFinite);
+
+    if (!selectedIds.length) {
+        return null;
+    }
+
+    return {
+        start: Math.min(...selectedIds),
+        end: Math.max(...selectedIds),
+    };
+}
+
+function downloadJson(filename, payload) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+}
+
+function deriveSceneFiltersForSearch() {
+    return {
+        content: sceneTaggerState.filters.content,
+        action_group: sceneTaggerState.filters.action_group,
+        action: sceneTaggerState.filters.action,
+        pose: sceneTaggerState.filters.pose,
+        exposure: sceneTaggerState.filters.exposure,
+        contact: sceneTaggerState.filters.contact,
+        attire: sceneTaggerState.filters.attire,
+        setting: sceneTaggerState.filters.setting,
+    };
+}
+
+function deriveSafetyFiltersForSearch() {
+    return {
+        age: sceneTaggerState.filters.age,
+        consent: sceneTaggerState.filters.consent,
+        risk: sceneTaggerState.filters.risk,
+    };
+}
+
+async function refreshSceneTaggerRecords() {
+    const scenes = await getAllScenes();
+    let filteredScenes = filterScenes(scenes, deriveSceneFiltersForSearch());
+    filteredScenes = filterBySafety(filteredScenes, deriveSafetyFiltersForSearch());
+    filteredScenes = rawSearch(filteredScenes, sceneTaggerState.filters.search);
+    filteredScenes.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+
+    sceneTaggerState.scenes = scenes;
+    sceneTaggerState.filteredScenes = filteredScenes;
+
+    if (sceneTaggerUi) {
+        sceneTaggerUi.refresh(sceneTaggerState);
+    }
+
+    await refreshMemoryDebugState().catch(() => { });
+}
+
+function setSceneTaggerStatus(status) {
+    sceneTaggerState.status = status;
+    if (sceneTaggerUi) {
+        sceneTaggerUi.refresh(sceneTaggerState);
+    }
+}
+
+async function refreshMemoryDebugState(context = getContext()) {
+    try {
+        const { chatId } = getChatIdentity(context);
+        sceneTaggerState.memoryDebug.currentState = await getCurrentState(chatId);
+        sceneTaggerState.memoryDebug.storageUsage = await getStorageUsage().catch(() => null);
+        sceneTaggerState.memoryDebug.lastUpdatedTimestamp = sceneTaggerState.memoryDebug.currentState?.updated_at || '';
+        sceneTaggerState.memoryDebug.lastSourceSceneId = sceneTaggerState.memoryDebug.currentState?.last_source_scene_id || '';
+    } catch (error) {
+        sceneTaggerState.memoryDebug.lastParserWarning = String(error?.message || error || 'memory refresh failed');
+    }
+
+    if (sceneTaggerUi) {
+        sceneTaggerUi.refresh(sceneTaggerState);
+    }
+}
+
+async function buildInjectedMemoryBlockForCurrentChat(trigger = 'normal') {
+    const context = getContext();
+    const memorySettings = getMemorySettings();
+    const { chatId } = getChatIdentity(context);
+
+    if (!memorySettings.memoryEnabled || memorySettings.memoryMode === 'off') {
+        sceneTaggerState.memoryDebug.lastInjectedMemoryBlock = '';
+        return '';
+    }
+
+    const latestUserMessage = [...(context.chat || [])].reverse().find(message => message?.is_user)?.mes || '';
+    const memoryContext = await getMemoryContextForChat(chatId, latestUserMessage, {
+        recentSceneLimit: 5,
+        relevantSceneLimit: 3,
+        summaryLimit: 1,
+    });
+
+    const currentState = memoryContext.currentState;
+    if (!currentState || !currentState.chat_id) {
+        sceneTaggerState.memoryDebug.lastParserWarning = 'No valid current_state available for injection.';
+        sceneTaggerState.memoryDebug.lastInjectedMemoryBlock = '';
+        return '';
+    }
+
+    const memoryBlock = buildContinuityMemoryBlock(currentState, {
+        memoryEnabled: memorySettings.memoryEnabled,
+        memoryMode: memorySettings.memoryMode,
+        maxMemoryChars: memorySettings.maxMemoryChars,
+        includeRecentEvents: memorySettings.includeRecentEvents,
+        includeOpenThreads: memorySettings.includeOpenThreads,
+    });
+
+    sceneTaggerState.memoryDebug.currentState = currentState;
+    sceneTaggerState.memoryDebug.lastInjectedMemoryBlock = memoryBlock;
+    sceneTaggerState.memoryDebug.lastUpdatedTimestamp = currentState.updated_at || '';
+    sceneTaggerState.memoryDebug.lastSourceSceneId = currentState.last_source_scene_id || '';
+    sceneTaggerState.memoryDebug.lastParserWarning = memoryBlock ? '' : 'Memory injection skipped because the built block was empty.';
+
+    console.log(`[${extensionName}] continuity memory block built`, {
+        trigger,
+        chatId,
+        memoryMode: memorySettings.memoryMode,
+        memoryBlock,
+    });
+
+    return memoryBlock;
+}
+
+async function persistSceneRecord(sceneRecord, currentState = null) {
+    await saveScene(sceneRecord);
+
+    const memoryEvent = sceneRecord.continuity_memory
+        ? {
+            memory_id: crypto.randomUUID(),
+            scene_id: sceneRecord.scene_id,
+            chat_id: sceneRecord.chat_id,
+            message_start: sceneRecord.message_start,
+            message_end: sceneRecord.message_end,
+            scene_summary: sceneRecord.continuity_memory.scene_summary || 'unknown',
+            current_location: sceneRecord.continuity_memory.location || 'unknown',
+            continuity_facts: sceneRecord.continuity_memory.continuity_facts || [],
+            open_threads: sceneRecord.continuity_memory.open_threads || [],
+            importance: sceneRecord.normalized_tags?.content === 'explicit' ? 'high' : 'medium',
+            recency_score: 1.0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        }
+        : null;
+
+    if (memoryEvent) {
+        await saveMemoryEvent(memoryEvent);
+    }
+
+    const nextCurrentState = applyContinuityMemoryToCurrentState(
+        currentState || DEFAULT_CURRENT_STATE,
+        sceneRecord.continuity_memory,
+        sceneRecord.scene_id,
+        sceneRecord.normalized_tags,
+    );
+    nextCurrentState.chat_id = sceneRecord.chat_id;
+    await saveCurrentState(sceneRecord.chat_id, nextCurrentState);
+
+    await compactChatScenes(sceneRecord.chat_id, extension_settings[extensionName]?.retention || {});
+    await archiveOldScenes(sceneRecord.chat_id, extension_settings[extensionName]?.retention || {});
+
+    const storageUsage = await getStorageUsage().catch(() => null);
+    sceneTaggerState.memoryDebug.storageUsage = storageUsage;
+    sceneTaggerState.memoryDebug.currentState = nextCurrentState;
+    sceneTaggerState.memoryDebug.lastUpdatedTimestamp = nextCurrentState.updated_at || '';
+    sceneTaggerState.memoryDebug.lastSourceSceneId = nextCurrentState.last_source_scene_id || '';
+
+    const hardStopPercent = extension_settings[extensionName]?.retention?.hardStopStoragePercent ?? 90;
+    const warnPercent = extension_settings[extensionName]?.retention?.warnStoragePercent ?? 70;
+
+    if (storageUsage?.percentUsed >= hardStopPercent) {
+        setSceneTaggerStatus(`Storage near quota (${storageUsage.percentUsed}%). Automatic tagging paused soon unless cleaned up.`);
+    } else if (storageUsage?.percentUsed >= warnPercent) {
+        setSceneTaggerStatus(`Storage warning: ${storageUsage.percentUsed}% of browser storage is in use.`);
+    }
+
+    return {
+        memoryEvent,
+        currentState: nextCurrentState,
+    };
+}
+
 const defaultSettings = {
     insertType: INSERT_TYPE.DISABLED,
     commonPromptPrefix: '',
     promptPhrases: [],
+    sceneTagger: {
+        autoSaveGeneratedScenes: true,
+    },
+    continuityMemory: {
+        ...DEFAULT_MEMORY_SETTINGS,
+    },
+    retention: {
+        maxScenesPerChat: 1000,
+        compactEveryScenes: 50,
+        maxRecentEvents: 5,
+        maxContinuityFacts: 30,
+        maxOpenThreads: 10,
+        archiveAfterScenes: 200,
+        deleteArchivedSourceText: false,
+        warnStoragePercent: 70,
+        hardStopStoragePercent: 90,
+    },
     llmAnalysis: {
         enabled: true,
         backend: 'kobold',
@@ -344,12 +646,43 @@ async function loadSettings() {
             extension_settings[extensionName].commonPromptPrefix = defaultSettings.commonPromptPrefix;
         }
 
+        if (!extension_settings[extensionName].sceneTagger) {
+            extension_settings[extensionName].sceneTagger = structuredClone(defaultSettings.sceneTagger);
+        } else {
+            for (const key in defaultSettings.sceneTagger) {
+                if (extension_settings[extensionName].sceneTagger[key] === undefined) {
+                    extension_settings[extensionName].sceneTagger[key] = structuredClone(defaultSettings.sceneTagger[key]);
+                }
+            }
+        }
+
+        if (!extension_settings[extensionName].continuityMemory) {
+            extension_settings[extensionName].continuityMemory = structuredClone(defaultSettings.continuityMemory);
+        } else {
+            for (const key in defaultSettings.continuityMemory) {
+                if (extension_settings[extensionName].continuityMemory[key] === undefined) {
+                    extension_settings[extensionName].continuityMemory[key] = structuredClone(defaultSettings.continuityMemory[key]);
+                }
+            }
+        }
+
+        if (!extension_settings[extensionName].retention) {
+            extension_settings[extensionName].retention = structuredClone(defaultSettings.retention);
+        } else {
+            for (const key in defaultSettings.retention) {
+                if (extension_settings[extensionName].retention[key] === undefined) {
+                    extension_settings[extensionName].retention[key] = structuredClone(defaultSettings.retention[key]);
+                }
+            }
+        }
+
         extension_settings[extensionName].promptPhrases = normalizePromptPhrases(
             extension_settings[extensionName].promptPhrases,
         );
     }
 
     updateUI();
+    sceneTaggerState.memorySettings = structuredClone(extension_settings[extensionName].continuityMemory);
     renderPromptPhraseItems();
 }
 
@@ -509,8 +842,385 @@ async function createSettings(settingsHtml) {
         saveSettingsDebounced();
     });
 
+    sceneTaggerUi = createSceneTaggerUi({
+        rootSelector: '#scene_tagger_ui_mount',
+        state: sceneTaggerState,
+        onTagCurrentChat: handleTagCurrentChat,
+        onTagSelectedMessages: handleTagSelectedMessages,
+        onReprocessScene: handleReprocessScene,
+        onExportJson: handleExportScenes,
+        onExportCurrentChatJson: handleExportCurrentChatScenes,
+        onImportJson: handleImportScenes,
+        onClearDatabase: handleClearSceneDatabase,
+        onCompactCurrentChat: handleCompactCurrentChat,
+        onArchiveOldScenes: handleArchiveOldScenes,
+        onDeleteArchivedSourceText: handleDeleteArchivedSourceText,
+        onDeleteScene: handleDeleteScene,
+        onEditScene: handleEditScene,
+        onViewSource: handleViewSceneSource,
+        onFiltersChanged: handleSceneFiltersChanged,
+        onMemorySettingsChanged: handleMemorySettingsChanged,
+        onClearCurrentChatMemory: handleClearCurrentChatMemory,
+        onClearAllMemory: handleClearAllMemory,
+        onRequestPersistentStorage: handleRequestPersistentStorage,
+        onShowStorageUsage: handleShowStorageUsage,
+    });
+
     updateUI();
     renderPromptPhraseItems();
+    sceneTaggerUi.refresh(sceneTaggerState);
+    await refreshSceneTaggerRecords();
+    await refreshMemoryDebugState();
+}
+
+async function tagMessageRange(startIndex, endIndex, existingSceneId = '') {
+    const context = getContext();
+    const chat = context.chat || [];
+
+    if (!chat.length) {
+        throw new Error('No chat messages available.');
+    }
+
+    const clampedStart = Math.max(0, Math.min(startIndex, chat.length - 1));
+    const clampedEnd = Math.max(clampedStart, Math.min(endIndex, chat.length - 1));
+    const { chatId, characterId } = getChatIdentity(context);
+    const sourceText = buildSourceTextFromRange(chat, clampedStart, clampedEnd);
+    const currentState = await getCurrentState(chatId);
+
+    const sceneEval = await classifyReplyForImage(context, {
+        chatId,
+        characterId,
+        messageStart: clampedStart,
+        messageEnd: clampedEnd,
+        sourceText,
+        currentState,
+    });
+
+    if (!sceneEval?.sceneRecord) {
+        throw new Error('Scene tagging did not return a scene record.');
+    }
+
+    const sceneRecord = {
+        ...sceneEval.sceneRecord,
+        scene_id: existingSceneId || sceneEval.sceneRecord.scene_id,
+        updated_at: new Date().toISOString(),
+    };
+
+    if (existingSceneId) {
+        const existingScene = sceneTaggerState.scenes.find(scene => scene.scene_id === existingSceneId);
+        if (existingScene?.created_at) {
+            sceneRecord.created_at = existingScene.created_at;
+        }
+    }
+
+    await persistSceneRecord(sceneRecord, currentState);
+    await refreshSceneTaggerRecords();
+    sceneTaggerState.selectedSceneId = sceneRecord.scene_id;
+    return sceneRecord;
+}
+
+async function handleTagCurrentChat() {
+    try {
+        setSceneTaggerStatus('Tagging current chat...');
+        const context = getContext();
+        await tagMessageRange(0, Math.max(0, (context.chat || []).length - 1));
+        setSceneTaggerStatus('Tagged current chat.');
+        toastr.success('Tagged current chat');
+    } catch (error) {
+        setSceneTaggerStatus('Tagging current chat failed.');
+        toastr.error(`Scene tagging failed: ${error.message || error}`);
+    }
+}
+
+async function handleTagSelectedMessages() {
+    try {
+        const range = getSelectedMessageRange();
+        if (!range) {
+            toastr.warning('Select one or more messages first.');
+            return;
+        }
+
+        setSceneTaggerStatus(`Tagging messages ${range.start}-${range.end}...`);
+        await tagMessageRange(range.start, range.end);
+        setSceneTaggerStatus(`Tagged messages ${range.start}-${range.end}.`);
+        toastr.success('Tagged selected messages');
+    } catch (error) {
+        setSceneTaggerStatus('Selected-message tagging failed.');
+        toastr.error(`Scene tagging failed: ${error.message || error}`);
+    }
+}
+
+async function handleReprocessScene(sceneId = '') {
+    try {
+        const targetSceneId = sceneId || sceneTaggerState.selectedSceneId;
+        const scene = sceneTaggerState.scenes.find(item => item.scene_id === targetSceneId);
+        if (!scene) {
+            toastr.warning('Choose a scene to reprocess first.');
+            return;
+        }
+
+        setSceneTaggerStatus(`Reprocessing scene ${scene.scene_id}...`);
+        await tagMessageRange(scene.message_start, scene.message_end, scene.scene_id);
+        setSceneTaggerStatus(`Reprocessed scene ${scene.scene_id}.`);
+        toastr.success('Scene reprocessed');
+    } catch (error) {
+        setSceneTaggerStatus('Scene reprocessing failed.');
+        toastr.error(`Scene reprocessing failed: ${error.message || error}`);
+    }
+}
+
+async function handleExportScenes() {
+    try {
+        setSceneTaggerStatus('Exporting scene records...');
+        const payload = await exportScenes();
+        downloadJson(`st-scene-tagger-export-${Date.now()}.json`, payload);
+        setSceneTaggerStatus('Exported scene records.');
+        toastr.success('Scene records exported');
+    } catch (error) {
+        setSceneTaggerStatus('Scene export failed.');
+        toastr.error(`Scene export failed: ${error.message || error}`);
+    }
+}
+
+async function handleExportCurrentChatScenes() {
+    try {
+        const context = getContext();
+        const { chatId } = getChatIdentity(context);
+        setSceneTaggerStatus('Exporting current chat scene records...');
+        const payload = await exportScenes({ chatId });
+        downloadJson(`st-scene-tagger-${chatId}-${Date.now()}.json`, payload);
+        setSceneTaggerStatus('Exported current chat scene records.');
+        toastr.success('Current chat scene records exported');
+    } catch (error) {
+        setSceneTaggerStatus('Current chat export failed.');
+        toastr.error(`Scene export failed: ${error.message || error}`);
+    }
+}
+
+async function handleImportScenes() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+
+    input.onchange = async event => {
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        try {
+            setSceneTaggerStatus(`Importing ${file.name}...`);
+            const text = await file.text();
+            const payload = JSON.parse(text);
+            await importScenes(payload);
+            await refreshSceneTaggerRecords();
+            setSceneTaggerStatus(`Imported ${file.name}.`);
+            toastr.success('Scene records imported');
+        } catch (error) {
+            setSceneTaggerStatus('Scene import failed.');
+            toastr.error(`Scene import failed: ${error.message || error}`);
+        }
+    };
+
+    input.click();
+}
+
+async function handleClearSceneDatabase() {
+    if (!window.confirm('Clear all local scene tagger data?')) {
+        return;
+    }
+
+    try {
+        setSceneTaggerStatus('Clearing local scene database...');
+        await clearScenes();
+        await refreshSceneTaggerRecords();
+        setSceneTaggerStatus('Cleared local scene database.');
+        toastr.success('Local scene database cleared');
+    } catch (error) {
+        setSceneTaggerStatus('Clearing local scene database failed.');
+        toastr.error(`Clear failed: ${error.message || error}`);
+    }
+}
+
+async function handleCompactCurrentChat() {
+    try {
+        const context = getContext();
+        const { chatId } = getChatIdentity(context);
+        await compactChatScenes(chatId, extension_settings[extensionName]?.retention || {});
+        await refreshSceneTaggerRecords();
+        setSceneTaggerStatus('Compacted current chat scenes.');
+        toastr.success('Current chat compacted');
+    } catch (error) {
+        toastr.error(`Compact failed: ${error.message || error}`);
+    }
+}
+
+async function handleArchiveOldScenes() {
+    try {
+        const context = getContext();
+        const { chatId } = getChatIdentity(context);
+        const count = await archiveOldScenes(chatId, extension_settings[extensionName]?.retention || {});
+        await refreshSceneTaggerRecords();
+        setSceneTaggerStatus(`Archived ${count} old scenes.`);
+        toastr.success(`Archived ${count} old scenes`);
+    } catch (error) {
+        toastr.error(`Archive failed: ${error.message || error}`);
+    }
+}
+
+async function handleDeleteArchivedSourceText() {
+    if (!window.confirm('Delete source text from archived scenes for the current chat?')) {
+        return;
+    }
+
+    try {
+        const context = getContext();
+        const { chatId } = getChatIdentity(context);
+        const count = await cleanupArchivedSourceText(chatId);
+        await refreshSceneTaggerRecords();
+        setSceneTaggerStatus(`Deleted source text from ${count} archived scenes.`);
+        toastr.success(`Archived source text deleted for ${count} scenes`);
+    } catch (error) {
+        toastr.error(`Archived source cleanup failed: ${error.message || error}`);
+    }
+}
+
+async function handleDeleteScene(sceneId) {
+    if (!sceneId) {
+        return;
+    }
+
+    if (!window.confirm('Delete this scene record?')) {
+        return;
+    }
+
+    try {
+        await deleteScene(sceneId);
+        if (sceneTaggerState.selectedSceneId === sceneId) {
+            sceneTaggerState.selectedSceneId = '';
+        }
+        await refreshSceneTaggerRecords();
+        setSceneTaggerStatus('Deleted scene record.');
+        toastr.success('Scene record deleted');
+    } catch (error) {
+        setSceneTaggerStatus('Delete failed.');
+        toastr.error(`Delete failed: ${error.message || error}`);
+    }
+}
+
+function handleViewSceneSource(sceneId) {
+    const scene = sceneTaggerState.scenes.find(item => item.scene_id === sceneId);
+    if (!scene) {
+        return;
+    }
+
+    sceneTaggerState.selectedSceneId = sceneId;
+    window.alert(scene.source_text || '(empty source text)');
+}
+
+async function handleEditScene(sceneId) {
+    const scene = sceneTaggerState.scenes.find(item => item.scene_id === sceneId);
+    if (!scene) {
+        return;
+    }
+
+    sceneTaggerState.selectedSceneId = sceneId;
+    const updatedJson = window.prompt(
+        'Edit the scene record JSON and submit the full object:',
+        JSON.stringify(scene, null, 2),
+    );
+
+    if (!updatedJson) {
+        return;
+    }
+
+    try {
+        const updatedScene = JSON.parse(updatedJson);
+        await saveScene(updatedScene);
+        await refreshSceneTaggerRecords();
+        setSceneTaggerStatus(`Saved edits for ${sceneId}.`);
+        toastr.success('Scene record updated');
+    } catch (error) {
+        toastr.error(`Edit failed: ${error.message || error}`);
+    }
+}
+
+function handleSceneFiltersChanged(controlId, value) {
+    const map = {
+        scene_filter_content: 'content',
+        scene_filter_action_group: 'action_group',
+        scene_filter_action: 'action',
+        scene_filter_pose: 'pose',
+        scene_filter_exposure: 'exposure',
+        scene_filter_contact: 'contact',
+        scene_filter_attire: 'attire',
+        scene_filter_setting: 'setting',
+        scene_filter_age: 'age',
+        scene_filter_consent: 'consent',
+        scene_filter_risk: 'risk',
+        scene_filter_search: 'search',
+    };
+
+    const filterKey = map[controlId];
+    if (!filterKey) {
+        return;
+    }
+
+    sceneTaggerState.filters[filterKey] = value;
+    refreshSceneTaggerRecords().catch(error => {
+        console.error(`[${extensionName}] failed to refresh scene filters`, error);
+    });
+}
+
+function handleMemorySettingsChanged(key, value) {
+    extension_settings[extensionName].continuityMemory[key] = value;
+    sceneTaggerState.memorySettings = structuredClone(extension_settings[extensionName].continuityMemory);
+    saveSettingsDebounced();
+    refreshMemoryDebugState().catch(() => { });
+}
+
+async function handleClearCurrentChatMemory() {
+    const context = getContext();
+    const { chatId } = getChatIdentity(context);
+
+    if (!window.confirm('Clear continuity memory for the current chat?')) {
+        return;
+    }
+
+    await clearCurrentState(chatId);
+    await refreshMemoryDebugState(context);
+    setSceneTaggerStatus('Cleared current chat memory.');
+}
+
+async function handleClearAllMemory() {
+    if (!window.confirm('Clear all continuity memory records?')) {
+        return;
+    }
+
+    await clearAllCurrentStates();
+    sceneTaggerState.memoryDebug.currentState = null;
+    sceneTaggerState.memoryDebug.lastInjectedMemoryBlock = '';
+    await refreshMemoryDebugState();
+    setSceneTaggerStatus('Cleared all continuity memory.');
+}
+
+async function handleRequestPersistentStorage() {
+    const granted = await requestPersistentStorage();
+    setSceneTaggerStatus(granted ? 'Persistent browser storage granted.' : 'Persistent browser storage was not granted.');
+    await refreshMemoryDebugState();
+}
+
+async function handleShowStorageUsage() {
+    const usage = await getStorageUsage();
+    sceneTaggerState.memoryDebug.storageUsage = usage;
+    if (usage?.percentUsed != null) {
+        setSceneTaggerStatus(`Storage usage: ${usage.percentUsed}% of browser quota.`);
+    } else {
+        setSceneTaggerStatus('Storage usage is unavailable in this browser.');
+    }
+    if (sceneTaggerUi) {
+        sceneTaggerUi.refresh(sceneTaggerState);
+    }
 }
 
 function onExtensionButtonClick() {
@@ -546,6 +1256,7 @@ function onExtensionButtonClick() {
 $(function () {
     (async function () {
         const settingsHtml = await $.get(`${extensionFolderPath}/settings.html`);
+        await initDb();
 
         $('#extensionsMenu').append(`<div id="auto_generation" class="list-group-item flex-container flexGap5">
             <div class="fa-solid fa-robot"></div>
@@ -623,16 +1334,27 @@ const callChat = createChatCaller({
 const {
     classifyReplyForImage,
     extractScenePatch,
-    generateImageTagFromReply,
-    sanitizeImagePrompt,
 } = createAnalysisPipeline({
     extensionName,
     getSettings: getLlmSettings,
-    getSceneMemory: () => sceneMemory,
     getImageAnalysisTextContext,
     normalizeScenePatch,
     callChat,
 });
+
+registerPromptInjection(async ({ type }) => {
+    const memoryBlock = await buildInjectedMemoryBlockForCurrentChat(type);
+    if (!memoryBlock) {
+        return null;
+    }
+
+    return {
+        memoryBlock,
+        position: getMemorySettings().injectPosition || 'before_latest_message',
+    };
+});
+
+globalThis.stSceneTaggerGenerateInterceptor = runPromptInjection;
 
 eventSource.on(event_types.MESSAGE_RECEIVED, handleIncomingMessage);
 
@@ -920,6 +1642,8 @@ async function handleIncomingMessage() {
     } else {
         try {
             isImageAnalysisCall = true;
+            const { chatId, characterId } = getChatIdentity(context);
+            const currentState = await getCurrentState(chatId);
 
             if (canUsePromptBuilder && llmSettings.sceneMemory?.enabled) {
                 const patch = await extractScenePatch(context);
@@ -930,7 +1654,23 @@ async function handleIncomingMessage() {
             }
 
             if (canUseClassifier) {
-                sceneEval = await classifyReplyForImage(context);
+                sceneEval = await classifyReplyForImage(context, {
+                    chatId,
+                    characterId,
+                    messageStart: Math.max(0, currentIndex - 1),
+                    messageEnd: currentIndex,
+                    sourceText: buildSourceTextFromRange(context.chat || [], Math.max(0, currentIndex - 1), currentIndex),
+                    currentState,
+                });
+            }
+
+            if (
+                canUseClassifier &&
+                extension_settings[extensionName]?.sceneTagger?.autoSaveGeneratedScenes !== false &&
+                sceneEval?.sceneRecord
+            ) {
+                await persistSceneRecord(sceneEval.sceneRecord, currentState);
+                await refreshSceneTaggerRecords();
             }
 
             if (explicitPhotoRequest) {
@@ -1026,36 +1766,21 @@ async function handleIncomingMessage() {
 
     let sceneTags = '';
 
-    if (!canUsePromptBuilder) {
-        sceneTags = fallbackSceneTags;
-        console.log(`[${extensionName}] using fallback scene tags because prompt builder is unavailable`, {
+    if (Array.isArray(sceneEval.imageTags) && sceneEval.imageTags.length > 0) {
+        sceneTags = imageTagsToSceneTags(sceneEval.imageTags, sceneMemory);
+        console.log(`[${extensionName}] using image tags from router pipeline`, {
             currentIndex,
+            imageTags: sceneEval.imageTags,
+            normalized: sceneEval.normalized,
+            safetyTags: sceneEval.safetyTags,
             sceneTags,
         });
     } else {
-        try {
-            isImageAnalysisCall = true;
-            sceneTags = await generateImageTagFromReply(context);
-            console.log(`[${extensionName}] scene builder raw output`, sceneTags);
-
-            if (extension_settings[extensionName]?.llmAnalysis?.promptSanitizer?.enabled) {
-                const sanitizedSceneTags = await sanitizeImagePrompt(sceneTags, context);
-                console.log(`[${extensionName}] scene builder sanitized output`, {
-                    rawSceneTags: sceneTags,
-                    sanitizedSceneTags,
-                });
-                sceneTags = sanitizedSceneTags || sceneTags;
-            }
-        } catch (error) {
-            console.error(`[${extensionName}] scene builder failed`, error);
-            sceneTags = fallbackSceneTags;
-            console.warn(`[${extensionName}] using fallback scene tags after scene builder failure`, {
-                currentIndex,
-                sceneTags,
-            });
-        } finally {
-            isImageAnalysisCall = false;
-        }
+        sceneTags = fallbackSceneTags;
+        console.warn(`[${extensionName}] image tags unavailable, using reply text fallback`, {
+            currentIndex,
+            sceneTags,
+        });
     }
 
     if (!sceneTags || !sceneTags.trim()) {

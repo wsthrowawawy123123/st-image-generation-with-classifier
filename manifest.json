@@ -1,5 +1,7 @@
 {
     "display_name": "Image Auto Generation",
+    "loading_order": 10,
+    "generate_interceptor": "stSceneTaggerGenerateInterceptor",
     "requires": [],
     "optional": [],
     "js": "index.js",

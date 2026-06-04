@@ -2,8 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-    cleanSanitizedTagOutput,
+    buildImageTags,
+    imageTagsToSceneTags,
     injectConsistencyAnchorTags,
+    parseRawExtractionFields,
+    normalizeSafetyTags,
+    normalizeNormalizedTags,
+    validateNormalizedTags,
+    validateSafetyTags,
     safeParseJsonObject,
 } from '../src/analysisPipeline.js';
 
@@ -26,33 +32,162 @@ test('safeParseJsonObject extracts JSON from fenced or noisy responses', () => {
     );
 });
 
-test('cleanSanitizedTagOutput keeps only the first tag line and strips notes', () => {
-    assert.equal(
-        cleanSanitizedTagOutput('holding hands, city lights\n\nNote: removed extras'),
-        'holding hands, city lights',
-    );
-
-    assert.equal(
-        cleanSanitizedTagOutput('"holding hands, city lights\nsecond line"'),
-        'holding hands, city lights',
+test('parseRawExtractionFields parses comma-separated array and string fields', () => {
+    assert.deepEqual(
+        parseRawExtractionFields(`Actions: sitting, reading
+Poses: sitting
+Objects: book, coffee
+Characters: she
+Mood: calm
+Location: kitchen table
+Attire: unknown
+Setting: kitchen`, {
+            actions: 'array',
+            poses: 'array',
+            objects: 'array',
+            characters: 'array',
+            mood: 'array',
+            location: 'string',
+            attire: 'array',
+            setting: 'string',
+        }),
+        {
+            actions: ['sitting', 'reading'],
+            poses: ['sitting'],
+            objects: ['book', 'coffee'],
+            characters: ['she'],
+            mood: ['calm'],
+            location: 'kitchen table',
+            attire: ['unknown'],
+            setting: 'kitchen',
+        },
     );
 });
 
-test('cleanSanitizedTagOutput strips outer emphasis and parenthesis wrappers from tag lists', () => {
+test('validateNormalizedTags accepts a spec-compliant normalized record', () => {
     assert.equal(
-        cleanSanitizedTagOutput('*moaning around cock, watery eyes, pulled back, licking lips*'),
-        'moaning around cock, watery eyes, pulled back, licking lips',
-    );
-
-    assert.equal(
-        cleanSanitizedTagOutput('(moaning around cock, watery eyes, pulled back, licking lips)'),
-        'moaning around cock, watery eyes, pulled back, licking lips',
+        validateNormalizedTags({
+            content: 'explicit',
+            'action group': 'sensual',
+            action: 'kissing',
+            pose: 'kneeling',
+            exposure: 'chest',
+            contact: 'mouth',
+            location: 'closet',
+            attire: 'partial clothing',
+            setting: 'closet',
+        }),
+        true,
     );
 });
 
-test('cleanSanitizedTagOutput returns empty string for non-string input', () => {
-    assert.equal(cleanSanitizedTagOutput(null), '');
-    assert.equal(cleanSanitizedTagOutput(undefined), '');
+test('validateNormalizedTags accepts values after unsupported labels are coerced to unknown', () => {
+    assert.equal(
+        validateNormalizedTags({
+            content: 'explicit',
+            'action group': 'sensual',
+            action: 'embracing',
+            pose: 'kneeling',
+            exposure: 'chest',
+            contact: 'mouth',
+            location: 'closet',
+            attire: 'partial clothing',
+            setting: 'closet',
+        }),
+        true,
+    );
+});
+
+test('normalizeNormalizedTags coerces invalid labels to unknown', () => {
+    assert.deepEqual(
+        normalizeNormalizedTags({
+            content: 'explicit',
+            'action group': 'not-real',
+            action: 'kissing',
+            pose: 'kneeling',
+            exposure: 'chest',
+            contact: 'mouth',
+            location: 'closet',
+            attire: 'partial clothing',
+            setting: 'closet',
+        }),
+        {
+            content: 'explicit',
+            action_group: 'unknown',
+            action: 'kissing',
+            pose: 'kneeling',
+            exposure: 'chest',
+            contact: 'mouth',
+            state: 'none',
+            appearance_detail: 'none',
+            fluid: 'none',
+            fluid_location: 'none',
+            location: 'closet',
+            attire: 'partial clothing',
+            clothing_state: 'normal',
+            setting: 'closet',
+        },
+    );
+});
+
+test('buildImageTags builds spec-style image tags from normalized labels', () => {
+    assert.equal(
+        buildImageTags({
+            content: 'explicit',
+            'action group': 'sensual',
+            action: 'kissing',
+            pose: 'kneeling',
+            exposure: 'chest',
+            contact: 'mouth',
+            location: 'closet',
+            attire: 'partial clothing',
+            setting: 'closet',
+        }).join(', '),
+        'kissing, kneeling, mouth contact, chest exposure, partial clothing, closet',
+    );
+});
+
+test('imageTagsToSceneTags builds a compact tag string from image tags', () => {
+    assert.equal(
+        imageTagsToSceneTags([
+            'kissing',
+            'kneeling',
+            'mouth contact',
+            'chest exposure',
+            'partial clothing',
+            'closet',
+        ]),
+        'kissing, kneeling, mouth contact, chest exposure, partial clothing, closet',
+    );
+});
+
+test('normalizeSafetyTags preserves valid safety labels', () => {
+    assert.deepEqual(
+        normalizeSafetyTags({
+            age: 'adult',
+            consent: 'consensual',
+            risk: 'none',
+            reason: 'adult consensual scene',
+        }),
+        {
+            age: 'adult',
+            consent: 'consensual',
+            risk: 'none',
+            reason: 'adult consensual scene',
+        },
+    );
+});
+
+test('validateSafetyTags accepts values after unsupported labels are coerced to unknown', () => {
+    assert.equal(
+        validateSafetyTags({
+            age: 'adult',
+            consent: 'questionable',
+            risk: 'none',
+            reason: 'unknown',
+        }),
+        true,
+    );
 });
 
 test('injectConsistencyAnchorTags prepends stable clothing and pose when missing', () => {
