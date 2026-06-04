@@ -80,11 +80,57 @@ export function parseRawExtractionFields(raw, schema) {
     return result;
 }
 
+function isBadContinuityFragment(value) {
+    const clean = String(value || '').trim().toLowerCase();
+
+    if (!clean || clean === 'unknown' || clean === 'none') {
+        return true;
+    }
+
+    // Common broken fragments from comma splitting / LLM continuation phrasing.
+    if (/^(and|or|with|plus|matching)\b/.test(clean)) {
+        return true;
+    }
+
+    if (/\b(and|or|with|plus)$/.test(clean)) {
+        return true;
+    }
+
+    // Too vague to be useful for image continuity.
+    if (['wearing', 'clothes', 'clothing', 'outfit', 'partial clothing', 'normal'].includes(clean)) {
+        return true;
+    }
+
+    return false;
+}
+
+function normalizeContinuityFact(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .replace(/^assistant wearing\s+/, '')
+        .replace(/^character wearing\s+/, '')
+        .replace(/^wearing\s+/, '');
+}
+
+function cleanContinuityFacts(values) {
+    return [...new Set(
+        (values || [])
+            .map(normalizeContinuityFact)
+            .filter(value => !isBadContinuityFragment(value))
+    )];
+}
+
 export function parseContinuityMemoryOutput(output) {
     const parsed = parseFieldOutput(output);
     if (!parsed) {
         return null;
     }
+
+    const continuityFacts = cleanContinuityFacts(
+        parseListValue(parsed['continuity facts'])
+    );
 
     return {
         scene_summary: parsed['scene summary'] || 'unknown',
@@ -93,7 +139,7 @@ export function parseContinuityMemoryOutput(output) {
         user_state: parseListValue(parsed['user state']),
         character_state: parseListValue(parsed['character state']),
         last_action: parsed['last action'] || 'unknown',
-        continuity_facts: parseListValue(parsed['continuity facts']),
+        continuity_facts: continuityFacts,
         open_threads: parseListValue(parsed['open threads']),
     };
 }

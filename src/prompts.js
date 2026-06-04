@@ -221,7 +221,7 @@ ${JSON.stringify(normalizedTags)}`;
 export function buildContinuityMemoryPrompt(chatChunk, currentState, normalizedTags) {
     return `You are a continuity memory extractor.
 
-Extract only facts needed to keep the next response consistent.
+Extract only facts needed to keep the next response visually and narratively consistent.
 
 Return exactly:
 Scene summary:
@@ -233,16 +233,42 @@ Last action:
 Continuity facts:
 Open threads:
 
-Rules:
+Definitions:
+- User state = visible facts about the User section only.
+- Character state = visible facts about the Assistant/Character section only.
+- In the Assistant section, first-person words like "I", "my", "me", and "myself" refer to the character, not the user.
+- In the User section, first-person words refer to the user.
+- Do not copy character pose, clothing, or emotions into user_state.
+- Do not copy user pose, clothing, or emotions into character_state.
+
+Actor assignment rules:
+- If a pose/action/clothing detail appears in the Assistant section, put it in Character state.
+- If a pose/action/clothing detail appears in the User section, put it in User state.
+- If the Assistant says "I lean forward", Character state includes leaning.
+- If the Assistant says "my eyes widen", Character state may include curious or surprised.
+- If the User says "I sit back", User state includes sitting or leaning back.
+- Never infer user clothing from assistant narration.
+- Never infer character clothing from user narration unless existing current state already says it.
+
+Clothing continuity rules:
+- Preserve specific clothing from existing current state and stated facts.
+- Use complete standalone garment phrases.
+- Good clothing facts: tight white button-up blouse, black miniskirt, black stockings, black high heels.
+- Bad clothing facts: and matching high, wearing, outfit, clothes, partial clothing.
+- Do not output sentence fragments.
+- Prefer specific clothing over generic labels.
+- If specific clothing is known, do not output partial clothing as a continuity fact.
+
+General rules:
 - Keep values short.
-- Do not write prose.
-- Do not invent details.
-- Preserve location, pose, clothing, clothing state, recent action, and unresolved scene state.
-- Use comma-separated values only for facts and open threads.
-- Unknown values must be written as unknown.
 - Use lowercase only.
+- Use comma-separated values only for User state, Character state, Continuity facts, and Open threads.
+- Unknown values must be written as unknown.
+- Preserve location, pose, clothing, clothing state, recent action, and unresolved scene state.
+- Do not write prose.
+- Do not invent new details.
 - Do not include image-model tags.
-- Do not include safety labels unless they are needed for continuity.
+- Do not include safety labels unless needed for continuity.
 - Do not output JSON.
 - Do not output extra fields.
 
