@@ -234,7 +234,7 @@ export function createAnalysisPipeline({
             ],
             {
                 useClassifierBackend: settings.classifierUseSeparateBackend === true,
-                max_tokens: Math.max(settings.classifierMaxTokens ?? 80, 160),
+                max_tokens: settings.classifierMaxTokens ?? 80,
                 temperature: settings.classifierTemperature ?? 0.1,
             },
         );
@@ -279,7 +279,7 @@ export function createAnalysisPipeline({
 
         Rules:
         - comma separated
-        - 1 to 4 words per tag
+        - 1 to 3 words per tag
         - 12 to 20 tags total
         - no sentences
         - no explanations
@@ -296,11 +296,12 @@ export function createAnalysisPipeline({
         - rewrite action into imageable body state whenever possible, such as crouching pose, arms raised, shirt lifted, leaning forward, hand at collar, parted lips, looking down, one knee up
         - prefer nouns, noun phrases, poses, body states, clothing states, and framing descriptors over verbs
         - when a verb appears, convert it into the visible result if possible: whispering -> parted lips, hesitating -> tense posture, stepping closer -> close distance, lifting shirt -> shirt lifted
-        - favor tags like posture, stance, gaze, hand placement, leg position, neckline, bare shoulders, raised hem, bent knee, arched back, desk edge, window light
+        - favor short tags like posture, stance, gaze, hand placement, bent knee, arched back, desk edge, window light
         - avoid bare single-word verb tags like leaning, crouching, whispering, turning, reaching
         - prefer fuller noun phrases such as crouching posture, seated posture, raised arms, bent knee, hand at collar
         - if you must use a verb-derived tag, use a more descriptive phrase like leaning back, looking down, shirt lifted, arms raised
         - prefer pose, posture, limb placement, gaze direction, clothing state, framing, and expression over story progression
+        - keep each tag as short as possible; compress longer phrasing into tighter visual tags
 
         Perspective rule:
         If the narration addresses "you" or is written from the assistant's point of view,
@@ -376,7 +377,7 @@ export function createAnalysisPipeline({
 
     Rules:
     - output comma-separated tags only
-    - 1-4 words per tag
+    - 1-3 words per tag
     - 12-20 tags max
     - remove duplicates and near-duplicates
     - keep character identity traits if present
@@ -394,6 +395,7 @@ export function createAnalysisPipeline({
     - prefer noun phrases and visible descriptors over verb forms whenever possible
     - convert verbs into visible outcomes when possible, for example whispering -> parted lips, hesitating -> tense posture, stepping closer -> close framing
     - avoid bare single-word verb tags; prefer noun phrases like crouching posture or fuller visual phrases like leaning back
+    - shorten any overly long tag into the tightest 1-3 word visual phrase that preserves meaning
     - drop inferred action, backstory, sequence, or transition language
     - drop abstract emotion labels like happy mood, affectionate mood, playful energy, romantic tension
     - drop non-visual bodily sensations or internal states like shaky legs, nervousness, arousal, anticipation
@@ -427,7 +429,7 @@ export function createAnalysisPipeline({
                 },
             ],
             {
-                max_tokens: Math.max(200, Math.min(settings.promptMaxTokens ?? 400, 400)),
+                max_tokens: settings.promptMaxTokens ?? 120,
                 temperature: Math.min(settings.promptTemperature ?? 0.4, 0.2),
             },
         );
