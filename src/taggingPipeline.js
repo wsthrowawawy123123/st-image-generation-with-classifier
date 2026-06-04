@@ -44,6 +44,8 @@ function extractContinuityAnchorValues(continuitySource) {
 
         const parts = [
             ...(Array.isArray(character.prompt_details) ? character.prompt_details : []),
+            ...(Array.isArray(continuitySource.continuity_facts) ? continuitySource.continuity_facts : []),
+
             typeof character.attire === 'string' ? character.attire.trim() : '',
             typeof character.clothing_state === 'string' &&
                 character.clothing_state !== 'unknown' &&
@@ -52,6 +54,7 @@ function extractContinuityAnchorValues(continuitySource) {
                 : '',
             typeof character.pose === 'string' ? character.pose.trim() : '',
             ...(Array.isArray(character.state) ? character.state : []),
+
             typeof continuitySource.current_location === 'string'
                 ? continuitySource.current_location.trim()
                 : '',
@@ -63,7 +66,17 @@ function extractContinuityAnchorValues(continuitySource) {
         return parts.filter(Boolean).filter(value => value !== 'unknown');
     }
 
-    return [];
+    return [
+        ...(Array.isArray(continuitySource.continuity_facts) ? continuitySource.continuity_facts : []),
+        typeof continuitySource.assistantClothing === 'string' ? continuitySource.assistantClothing.trim() : '',
+        typeof continuitySource.assistantPose === 'string' ? continuitySource.assistantPose.trim() : '',
+        typeof continuitySource.assistantExpression === 'string' ? continuitySource.assistantExpression.trim() : '',
+        typeof continuitySource.interaction === 'string' ? continuitySource.interaction.trim() : '',
+        typeof continuitySource.environment === 'string' ? continuitySource.environment.trim() : '',
+        typeof continuitySource.location === 'string' ? continuitySource.location.trim() : '',
+        typeof continuitySource.lighting === 'string' ? continuitySource.lighting.trim() : '',
+        ...(Array.isArray(continuitySource.props) ? continuitySource.props : []),
+    ].filter(Boolean).filter(value => value !== 'unknown');
 }
 
 export function injectConsistencyAnchorTags(rawTags, continuitySource) {
