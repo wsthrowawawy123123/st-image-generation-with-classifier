@@ -290,6 +290,17 @@ export function createAnalysisPipeline({
         - include stable clothing, pose, environment, props, and lighting details from scene memory when they are still visually relevant
         - prioritize assistantClothing and assistantPose as the strongest continuity anchors unless the CURRENT assistant reply clearly changes them
         - if scene memory already defines clothing or body position, keep those exact visual details in the output whenever they are still compatible with the current moment
+        - prefer visible static descriptions over narrative actions
+        - keep explicit sexual phrases such as blowjob, anal, creampie, cum, etc
+        - avoid conversational or transient action verbs like whispering, hesitating, stepping closer, walking away, muttering, reaching, turning, or moving unless the visible end state can be described more directly
+        - rewrite action into imageable body state whenever possible, such as crouching pose, arms raised, shirt lifted, leaning forward, hand at collar, parted lips, looking down, one knee up
+        - prefer nouns, noun phrases, poses, body states, clothing states, and framing descriptors over verbs
+        - when a verb appears, convert it into the visible result if possible: whispering -> parted lips, hesitating -> tense posture, stepping closer -> close distance, lifting shirt -> shirt lifted
+        - favor tags like posture, stance, gaze, hand placement, leg position, neckline, bare shoulders, raised hem, bent knee, arched back, desk edge, window light
+        - avoid bare single-word verb tags like leaning, crouching, whispering, turning, reaching
+        - prefer fuller noun phrases such as crouching posture, seated posture, raised arms, bent knee, hand at collar
+        - if you must use a verb-derived tag, use a more descriptive phrase like leaning back, looking down, shirt lifted, arms raised
+        - prefer pose, posture, limb placement, gaze direction, clothing state, framing, and expression over story progression
 
         Perspective rule:
         If the narration addresses "you" or is written from the assistant's point of view,
@@ -308,6 +319,7 @@ export function createAnalysisPipeline({
         7. lighting or atmosphere
 
         Prefer static visual states over motion verbs.
+        If a tag sounds like narration of an action instead of something clearly visible in a still image, rewrite it into a visible pose or descriptive state.
 
         Example output:
         first person perspective, kneeling pose, looking up, open blouse, office desk, warm lighting
@@ -376,6 +388,12 @@ export function createAnalysisPipeline({
     - keep interaction tags only if they describe something directly visible, like holding hands or touching shoulder
     - preserve assistantClothing and assistantPose from Scene memory whenever they still fit the current visible moment
     - do not drop clear clothing or body-position tags just to shorten the list
+    - replace narrative or conversational verbs with visible static descriptors whenever possible
+    - drop tags like whispering, hesitating, stepping closer, muttering, turning, or walking if they are not directly imageable in a still frame
+    - prefer tags such as crouching pose, raised arms, lifted shirt, leaning posture, hand on thigh, looking away, parted lips, or seated posture
+    - prefer noun phrases and visible descriptors over verb forms whenever possible
+    - convert verbs into visible outcomes when possible, for example whispering -> parted lips, hesitating -> tense posture, stepping closer -> close framing
+    - avoid bare single-word verb tags; prefer noun phrases like crouching posture or fuller visual phrases like leaning back
     - drop inferred action, backstory, sequence, or transition language
     - drop abstract emotion labels like happy mood, affectionate mood, playful energy, romantic tension
     - drop non-visual bodily sensations or internal states like shaky legs, nervousness, arousal, anticipation

@@ -1064,13 +1064,15 @@ async function handleIncomingMessage() {
     }
 
     const commonPromptPrefix = resolveCommonPromptPrefix();
-    const prompt = buildPromptFromPhraseItems(
+    const rawPrompt = buildPromptFromPhraseItems(
         extension_settings[extensionName]?.promptPhrases,
         sceneTags,
         commonPromptPrefix.value,
     );
+    const prompt = rawPrompt;
 
     console.log(`[${extensionName}] final SD prompt`, {
+        rawPrompt,
         prompt,
         commonPromptPrefix: commonPromptPrefix.value,
         commonPromptPrefixSource: commonPromptPrefix.source,
