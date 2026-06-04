@@ -7,6 +7,7 @@ const STORE_PROMPT_VERSIONS = 'prompt_versions';
 const STORE_MEMORY_EVENTS = 'memory_events';
 const STORE_CURRENT_STATE = 'current_state';
 const STORE_ROLLUP_SUMMARIES = 'rollup_summaries';
+const STORE_CANON_SNAPSHOTS = 'canon_snapshots';
 
 let dbPromise = null;
 
@@ -84,6 +85,16 @@ function createRollupSummariesStore(db) {
     store.createIndex('created_at', 'created_at', { unique: false });
 }
 
+function createCanonSnapshotsStore(db) {
+    if (db.objectStoreNames.contains(STORE_CANON_SNAPSHOTS)) {
+        return;
+    }
+
+    const store = db.createObjectStore(STORE_CANON_SNAPSHOTS, { keyPath: 'chat_id' });
+    store.createIndex('character_id', 'character_id', { unique: false });
+    store.createIndex('updated_at', 'updated_at', { unique: false });
+}
+
 function createBasicStore(db, name, keyPath = 'id') {
     if (!db.objectStoreNames.contains(name)) {
         db.createObjectStore(name, { keyPath });
@@ -105,6 +116,7 @@ export async function initDb() {
                 createMemoryEventsStore(db);
                 createCurrentStateStore(db);
                 createRollupSummariesStore(db);
+                createCanonSnapshotsStore(db);
             };
 
             request.onsuccess = () => resolve(request.result);
@@ -178,13 +190,14 @@ export async function deleteScene(sceneId) {
 export async function clearScenes() {
     const db = await initDb();
     const tx = db.transaction(
-        [STORE_SCENES, STORE_MEMORY_EVENTS, STORE_CURRENT_STATE, STORE_ROLLUP_SUMMARIES],
+        [STORE_SCENES, STORE_MEMORY_EVENTS, STORE_CURRENT_STATE, STORE_ROLLUP_SUMMARIES, STORE_CANON_SNAPSHOTS],
         'readwrite',
     );
     tx.objectStore(STORE_SCENES).clear();
     tx.objectStore(STORE_MEMORY_EVENTS).clear();
     tx.objectStore(STORE_CURRENT_STATE).clear();
     tx.objectStore(STORE_ROLLUP_SUMMARIES).clear();
+    tx.objectStore(STORE_CANON_SNAPSHOTS).clear();
     await transactionDone(tx);
 }
 
@@ -196,6 +209,9 @@ export async function exportScenes(options = {}) {
         ? (await getCurrentState(chatId) ? [await getCurrentState(chatId)] : [])
         : await getAllCurrentStates();
     const rollupSummaries = chatId ? await getRollupSummariesByChat(chatId) : await getAllRollupSummaries();
+    const canonSnapshots = chatId
+        ? (await getCanonSnapshot(chatId) ? [await getCanonSnapshot(chatId)] : [])
+        : await getAllCanonSnapshots();
 
     return {
         app: 'st-scene-tagger',
@@ -205,6 +221,7 @@ export async function exportScenes(options = {}) {
         memory_events: memoryEvents,
         current_states: currentStates,
         rollup_summaries: rollupSummaries,
+        canon_snapshots: canonSnapshots,
     };
 }
 
@@ -213,9 +230,10 @@ export async function importScenes(payload) {
     const memoryEvents = Array.isArray(payload?.memory_events) ? payload.memory_events : [];
     const currentStates = Array.isArray(payload?.current_states) ? payload.current_states : [];
     const rollupSummaries = Array.isArray(payload?.rollup_summaries) ? payload.rollup_summaries : [];
+    const canonSnapshots = Array.isArray(payload?.canon_snapshots) ? payload.canon_snapshots : [];
     const db = await initDb();
     const tx = db.transaction(
-        [STORE_SCENES, STORE_MEMORY_EVENTS, STORE_CURRENT_STATE, STORE_ROLLUP_SUMMARIES],
+        [STORE_SCENES, STORE_MEMORY_EVENTS, STORE_CURRENT_STATE, STORE_ROLLUP_SUMMARIES, STORE_CANON_SNAPSHOTS],
         'readwrite',
     );
 
@@ -233,6 +251,10 @@ export async function importScenes(payload) {
 
     for (const rollupSummary of rollupSummaries) {
         tx.objectStore(STORE_ROLLUP_SUMMARIES).put(rollupSummary);
+    }
+
+    for (const canonSnapshot of canonSnapshots) {
+        tx.objectStore(STORE_CANON_SNAPSHOTS).put(canonSnapshot);
     }
 
     await transactionDone(tx);
@@ -294,6 +316,47 @@ export async function clearAllCurrentStates() {
 
 export async function getAllCurrentStates() {
     const store = await getStore(STORE_CURRENT_STATE);
+    return requestToPromise(store.getAll());
+}
+
+export async function saveCanonSnapshot(chatIdOrSnapshot, maybeSnapshot) {
+    const snapshot = typeof chatIdOrSnapshot === 'string'
+        ? { ...maybeSnapshot, chat_id: chatIdOrSnapshot }
+        : chatIdOrSnapshot;
+
+    const db = await initDb();
+    const tx = db.transaction(STORE_CANON_SNAPSHOTS, 'readwrite');
+    tx.objectStore(STORE_CANON_SNAPSHOTS).put(snapshot);
+    await transactionDone(tx);
+    return snapshot;
+}
+
+export async function getCanonSnapshot(chatId) {
+    const store = await getStore(STORE_CANON_SNAPSHOTS);
+    return requestToPromise(store.get(chatId));
+}
+
+export async function updateCanonSnapshot(chatId, patch) {
+    const snapshot = (await getCanonSnapshot(chatId)) || { chat_id: chatId };
+    return saveCanonSnapshot(chatId, { ...snapshot, ...patch, chat_id: chatId, updated_at: new Date().toISOString() });
+}
+
+export async function clearCanonSnapshot(chatId) {
+    const db = await initDb();
+    const tx = db.transaction(STORE_CANON_SNAPSHOTS, 'readwrite');
+    tx.objectStore(STORE_CANON_SNAPSHOTS).delete(chatId);
+    await transactionDone(tx);
+}
+
+export async function clearAllCanonSnapshots() {
+    const db = await initDb();
+    const tx = db.transaction(STORE_CANON_SNAPSHOTS, 'readwrite');
+    tx.objectStore(STORE_CANON_SNAPSHOTS).clear();
+    await transactionDone(tx);
+}
+
+export async function getAllCanonSnapshots() {
+    const store = await getStore(STORE_CANON_SNAPSHOTS);
     return requestToPromise(store.getAll());
 }
 

@@ -27,6 +27,9 @@ export const DEFAULT_CURRENT_STATE = {
     last_action: 'unknown',
     recent_events: [],
     continuity_facts: [],
+    user_assertions: [],
+    temporary_guidance: [],
+    corrections: [],
     open_threads: [],
     last_source_scene_id: 'unknown',
     updated_at: '',
@@ -218,6 +221,13 @@ export function buildContinuityMemoryBlock(currentState, options = {}) {
 
     if (currentState.last_action && currentState.last_action !== 'unknown') {
         lines.push(`Last action: ${currentState.last_action}`);
+    }
+
+    if (settings.showUserCorrectionsInPrompt !== false && (currentState.user_assertions || []).length) {
+        lines.push('User-corrected facts:');
+        for (const assertion of (currentState.user_assertions || []).slice(-5)) {
+            lines.push(`- ${assertion.fact || assertion.value || 'unknown'}`);
+        }
     }
 
     if (settings.memoryMode === 'strong' && settings.includeRecentEvents && (currentState.recent_events || []).length) {

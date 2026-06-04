@@ -30,8 +30,16 @@ import {
 import { DEFAULT_CURRENT_STATE, DEFAULT_MEMORY_SETTINGS } from './src/memory.js';
 import { registerPromptInjection, runPromptInjection } from './src/memoryInjectionAdapter.js';
 import {
+    DEFAULT_CANON_SNAPSHOT,
+    buildCanonMemoryBlock,
+    buildCanonSnapshotFromContext,
+    buildCanonSnapshotPrompt,
+    parseCanonSnapshotOutput,
+} from './src/canonSnapshot.js';
+import {
     archiveOldScenes,
     cleanupArchivedSourceText,
+    clearCanonSnapshot,
     clearScenes,
     clearAllCurrentStates,
     clearCurrentState,
@@ -39,11 +47,13 @@ import {
     deleteScene,
     exportScenes,
     getAllScenes,
+    getCanonSnapshot,
     getCurrentState,
     getMemoryContextForChat,
     getStorageUsage,
     importScenes,
     initDb,
+    saveCanonSnapshot,
     requestPersistentStorage,
     saveCurrentState,
     saveMemoryEvent,
@@ -51,6 +61,13 @@ import {
 } from './src/storage.js';
 import { filterBySafety, filterScenes, rawSearch } from './src/search.js';
 import { createSceneTaggerUi } from './src/ui.js';
+import {
+    DEFAULT_USER_REPLY_MEMORY_SETTINGS,
+    applyUserReplyMemoryToCurrentState,
+    buildUserReplyMemoryPrompt,
+    detectUserCorrection,
+    parseUserReplyMemoryOutput,
+} from './src/userReplyMemory.js';
 
 const extensionName = 'st-image-generation-with-classifier';
 const extensionFolderPath = `/scripts/extensions/third-party/${extensionName}`;
@@ -75,8 +92,16 @@ const sceneTaggerState = {
     selectedSceneId: '',
     status: 'Ready',
     memorySettings: structuredClone(DEFAULT_MEMORY_SETTINGS),
+    canonSettings: {
+        canonEnabled: true,
+        refreshCanonOnChatLoad: true,
+        includeCanonInMemoryBlock: true,
+        maxCanonChars: 600,
+    },
+    userReplySettings: structuredClone(DEFAULT_USER_REPLY_MEMORY_SETTINGS),
     memoryDebug: {
         currentState: null,
+        canonSnapshot: null,
         lastInjectedMemoryBlock: '',
         lastUpdatedTimestamp: '',
         lastSourceSceneId: '',
@@ -349,10 +374,17 @@ function setSceneTaggerStatus(status) {
     }
 }
 
+function syncSceneTaggerUiSettings() {
+    sceneTaggerState.memorySettings = structuredClone(extension_settings[extensionName]?.continuityMemory || defaultSettings.continuityMemory);
+    sceneTaggerState.canonSettings = structuredClone(extension_settings[extensionName]?.canon || defaultSettings.canon);
+    sceneTaggerState.userReplySettings = structuredClone(extension_settings[extensionName]?.userReplyMemory || defaultSettings.userReplyMemory);
+}
+
 async function refreshMemoryDebugState(context = getContext()) {
     try {
         const { chatId } = getChatIdentity(context);
         sceneTaggerState.memoryDebug.currentState = await getCurrentState(chatId);
+        sceneTaggerState.memoryDebug.canonSnapshot = await getCanonSnapshot(chatId);
         sceneTaggerState.memoryDebug.storageUsage = await getStorageUsage().catch(() => null);
         sceneTaggerState.memoryDebug.lastUpdatedTimestamp = sceneTaggerState.memoryDebug.currentState?.updated_at || '';
         sceneTaggerState.memoryDebug.lastSourceSceneId = sceneTaggerState.memoryDebug.currentState?.last_source_scene_id || '';
@@ -365,9 +397,74 @@ async function refreshMemoryDebugState(context = getContext()) {
     }
 }
 
+async function refreshCanonSnapshotForCurrentChat(context = getContext(), force = false) {
+    const { chatId, characterId } = getChatIdentity(context);
+    const canonSettings = extension_settings[extensionName]?.canon || defaultSettings.canon;
+
+    if (!canonSettings.canonEnabled) {
+        return null;
+    }
+
+    const existing = await getCanonSnapshot(chatId);
+    if (existing && !force && canonSettings.refreshCanonOnChatLoad !== true) {
+        return existing;
+    }
+
+    const baseline = buildCanonSnapshotFromContext(context);
+    const setupFields = {
+        character_name: baseline.character_name,
+        user_persona: baseline.user_persona,
+        scenario: baseline.scenario,
+        character: Array.isArray(context.characters) && Number.isInteger(context.characterId)
+            ? context.characters[context.characterId]
+            : null,
+    };
+
+    let parsed = null;
+    try {
+        const result = await callChat(
+            [
+                {
+                    role: 'system',
+                    content: 'You extract compact canon snapshots. Return only the requested labeled fields.',
+                },
+                {
+                    role: 'user',
+                    content: buildCanonSnapshotPrompt(setupFields),
+                },
+            ],
+            {
+                max_tokens: 180,
+                temperature: 0.1,
+            },
+        );
+
+        parsed = parseCanonSnapshotOutput(result);
+    } catch (error) {
+        console.warn(`[${extensionName}] canon snapshot extraction failed, using baseline context fallback`, error);
+    }
+
+    const snapshot = {
+        ...DEFAULT_CANON_SNAPSHOT,
+        ...baseline,
+        ...(existing || {}),
+        ...(parsed || {}),
+        chat_id: chatId,
+        character_id: characterId,
+        updated_at: new Date().toISOString(),
+        created_at: existing?.created_at || baseline.created_at || new Date().toISOString(),
+    };
+
+    await saveCanonSnapshot(chatId, snapshot);
+    sceneTaggerState.memoryDebug.canonSnapshot = snapshot;
+    await refreshMemoryDebugState(context).catch(() => { });
+    return snapshot;
+}
+
 async function buildInjectedMemoryBlockForCurrentChat(trigger = 'normal') {
     const context = getContext();
     const memorySettings = getMemorySettings();
+    const canonSettings = extension_settings[extensionName]?.canon || defaultSettings.canon;
     const { chatId } = getChatIdentity(context);
 
     if (!memorySettings.memoryEnabled || memorySettings.memoryMode === 'off') {
@@ -383,11 +480,17 @@ async function buildInjectedMemoryBlockForCurrentChat(trigger = 'normal') {
     });
 
     const currentState = memoryContext.currentState;
+    const canonSnapshot = await getCanonSnapshot(chatId);
     if (!currentState || !currentState.chat_id) {
         sceneTaggerState.memoryDebug.lastParserWarning = 'No valid current_state available for injection.';
         sceneTaggerState.memoryDebug.lastInjectedMemoryBlock = '';
         return '';
     }
+
+    const canonBlock = buildCanonMemoryBlock(canonSnapshot, {
+        ...canonSettings,
+        maxCanonChars: canonSettings.maxCanonChars,
+    });
 
     const memoryBlock = buildContinuityMemoryBlock(currentState, {
         memoryEnabled: memorySettings.memoryEnabled,
@@ -395,22 +498,28 @@ async function buildInjectedMemoryBlockForCurrentChat(trigger = 'normal') {
         maxMemoryChars: memorySettings.maxMemoryChars,
         includeRecentEvents: memorySettings.includeRecentEvents,
         includeOpenThreads: memorySettings.includeOpenThreads,
+        showUserCorrectionsInPrompt: extension_settings[extensionName]?.userReplyMemory?.showUserCorrectionsInPrompt !== false,
     });
 
+    const combinedBlock = [canonBlock, memoryBlock].filter(Boolean).join('\n\n');
+
     sceneTaggerState.memoryDebug.currentState = currentState;
-    sceneTaggerState.memoryDebug.lastInjectedMemoryBlock = memoryBlock;
+    sceneTaggerState.memoryDebug.canonSnapshot = canonSnapshot;
+    sceneTaggerState.memoryDebug.lastInjectedMemoryBlock = combinedBlock;
     sceneTaggerState.memoryDebug.lastUpdatedTimestamp = currentState.updated_at || '';
     sceneTaggerState.memoryDebug.lastSourceSceneId = currentState.last_source_scene_id || '';
-    sceneTaggerState.memoryDebug.lastParserWarning = memoryBlock ? '' : 'Memory injection skipped because the built block was empty.';
+    sceneTaggerState.memoryDebug.lastParserWarning = combinedBlock ? '' : 'Memory injection skipped because the built block was empty.';
 
     console.log(`[${extensionName}] continuity memory block built`, {
         trigger,
         chatId,
         memoryMode: memorySettings.memoryMode,
+        canonBlock,
         memoryBlock,
+        combinedBlock,
     });
 
-    return memoryBlock;
+    return combinedBlock;
 }
 
 async function persistSceneRecord(sceneRecord, currentState = null) {
@@ -480,6 +589,16 @@ const defaultSettings = {
     },
     continuityMemory: {
         ...DEFAULT_MEMORY_SETTINGS,
+        showUserCorrectionsInPrompt: true,
+    },
+    canon: {
+        canonEnabled: true,
+        refreshCanonOnChatLoad: true,
+        includeCanonInMemoryBlock: true,
+        maxCanonChars: 600,
+    },
+    userReplyMemory: {
+        ...DEFAULT_USER_REPLY_MEMORY_SETTINGS,
     },
     retention: {
         maxScenesPerChat: 1000,
@@ -676,13 +795,33 @@ async function loadSettings() {
             }
         }
 
+        if (!extension_settings[extensionName].canon) {
+            extension_settings[extensionName].canon = structuredClone(defaultSettings.canon);
+        } else {
+            for (const key in defaultSettings.canon) {
+                if (extension_settings[extensionName].canon[key] === undefined) {
+                    extension_settings[extensionName].canon[key] = structuredClone(defaultSettings.canon[key]);
+                }
+            }
+        }
+
+        if (!extension_settings[extensionName].userReplyMemory) {
+            extension_settings[extensionName].userReplyMemory = structuredClone(defaultSettings.userReplyMemory);
+        } else {
+            for (const key in defaultSettings.userReplyMemory) {
+                if (extension_settings[extensionName].userReplyMemory[key] === undefined) {
+                    extension_settings[extensionName].userReplyMemory[key] = structuredClone(defaultSettings.userReplyMemory[key]);
+                }
+            }
+        }
+
         extension_settings[extensionName].promptPhrases = normalizePromptPhrases(
             extension_settings[extensionName].promptPhrases,
         );
     }
 
     updateUI();
-    sceneTaggerState.memorySettings = structuredClone(extension_settings[extensionName].continuityMemory);
+    syncSceneTaggerUiSettings();
     renderPromptPhraseItems();
 }
 
@@ -862,6 +1001,12 @@ async function createSettings(settingsHtml) {
         onMemorySettingsChanged: handleMemorySettingsChanged,
         onClearCurrentChatMemory: handleClearCurrentChatMemory,
         onClearAllMemory: handleClearAllMemory,
+        onRefreshCanonSnapshot: handleRefreshCanonSnapshot,
+        onViewCanonSnapshot: handleViewCanonSnapshot,
+        onClearCanonSnapshot: handleClearCanonSnapshot,
+        onCanonSettingsChanged: handleCanonSettingsChanged,
+        onUserReplySettingsChanged: handleUserReplySettingsChanged,
+        onClearUserCorrections: handleClearUserCorrections,
         onRequestPersistentStorage: handleRequestPersistentStorage,
         onShowStorageUsage: handleShowStorageUsage,
     });
@@ -1174,7 +1319,21 @@ function handleSceneFiltersChanged(controlId, value) {
 
 function handleMemorySettingsChanged(key, value) {
     extension_settings[extensionName].continuityMemory[key] = value;
-    sceneTaggerState.memorySettings = structuredClone(extension_settings[extensionName].continuityMemory);
+    syncSceneTaggerUiSettings();
+    saveSettingsDebounced();
+    refreshMemoryDebugState().catch(() => { });
+}
+
+function handleCanonSettingsChanged(key, value) {
+    extension_settings[extensionName].canon[key] = value;
+    syncSceneTaggerUiSettings();
+    saveSettingsDebounced();
+    refreshMemoryDebugState().catch(() => { });
+}
+
+function handleUserReplySettingsChanged(key, value) {
+    extension_settings[extensionName].userReplyMemory[key] = value;
+    syncSceneTaggerUiSettings();
     saveSettingsDebounced();
     refreshMemoryDebugState().catch(() => { });
 }
@@ -1202,6 +1361,77 @@ async function handleClearAllMemory() {
     sceneTaggerState.memoryDebug.lastInjectedMemoryBlock = '';
     await refreshMemoryDebugState();
     setSceneTaggerStatus('Cleared all continuity memory.');
+}
+
+async function handleRefreshCanonSnapshot() {
+    try {
+        setSceneTaggerStatus('Refreshing canon snapshot...');
+        await refreshCanonSnapshotForCurrentChat(getContext(), true);
+        setSceneTaggerStatus('Canon snapshot refreshed.');
+        toastr.success('Canon snapshot refreshed');
+    } catch (error) {
+        setSceneTaggerStatus('Canon snapshot refresh failed.');
+        toastr.error(`Canon refresh failed: ${error.message || error}`);
+    }
+}
+
+async function handleViewCanonSnapshot() {
+    try {
+        const context = getContext();
+        const { chatId } = getChatIdentity(context);
+        const snapshot = await getCanonSnapshot(chatId);
+        window.alert(JSON.stringify(snapshot || null, null, 2));
+        await refreshMemoryDebugState(context);
+    } catch (error) {
+        toastr.error(`Canon snapshot view failed: ${error.message || error}`);
+    }
+}
+
+async function handleClearCanonSnapshot() {
+    const context = getContext();
+    const { chatId } = getChatIdentity(context);
+
+    if (!window.confirm('Clear the canon snapshot for the current chat?')) {
+        return;
+    }
+
+    try {
+        await clearCanonSnapshot(chatId);
+        await refreshMemoryDebugState(context);
+        setSceneTaggerStatus('Cleared current chat canon snapshot.');
+        toastr.success('Canon snapshot cleared');
+    } catch (error) {
+        setSceneTaggerStatus('Clearing canon snapshot failed.');
+        toastr.error(`Canon snapshot clear failed: ${error.message || error}`);
+    }
+}
+
+async function handleClearUserCorrections() {
+    const context = getContext();
+    const { chatId } = getChatIdentity(context);
+
+    if (!window.confirm('Clear user corrections, assertions, and temporary guidance for the current chat?')) {
+        return;
+    }
+
+    try {
+        const currentState = (await getCurrentState(chatId)) || { ...DEFAULT_CURRENT_STATE, chat_id: chatId };
+        const nextState = {
+            ...currentState,
+            user_assertions: [],
+            corrections: [],
+            temporary_guidance: [],
+            updated_at: new Date().toISOString(),
+        };
+        await saveCurrentState(chatId, nextState);
+        sceneTaggerState.memoryDebug.currentState = nextState;
+        await refreshMemoryDebugState(context);
+        setSceneTaggerStatus('Cleared user corrections for the current chat.');
+        toastr.success('User corrections cleared');
+    } catch (error) {
+        setSceneTaggerStatus('Clearing user corrections failed.');
+        toastr.error(`User correction clear failed: ${error.message || error}`);
+    }
 }
 
 async function handleRequestPersistentStorage() {
@@ -1267,6 +1497,9 @@ $(function () {
 
         await loadSettings();
         await createSettings(settingsHtml);
+        await refreshCanonSnapshotForCurrentChat(getContext()).catch(error => {
+            console.warn(`[${extensionName}] initial canon snapshot refresh failed`, error);
+        });
 
         $('#extensions-settings-button').off('click.stImageAutoGeneration').on('click.stImageAutoGeneration', function () {
             setTimeout(() => {
@@ -1551,6 +1784,74 @@ async function handleIncomingMessage() {
     });
 
     if (!message || message.is_user) {
+        if (message?.is_user && extension_settings[extensionName]?.userReplyMemory?.userReplyMemoryEnabled !== false) {
+            try {
+                const currentState = await getCurrentState(getChatIdentity(context).chatId);
+                const userMessageText = preprocessForImagePrompt(message?.mes || '');
+                if (
+                    userMessageText &&
+                    (
+                        extension_settings[extensionName]?.userReplyMemory?.detectCorrectionsWithRegex === true
+                            ? detectUserCorrection(userMessageText)
+                            : extension_settings[extensionName]?.userReplyMemory?.runLlmCorrectionExtractor === true
+                    )
+                ) {
+                    let memory = null;
+
+                    if (extension_settings[extensionName]?.userReplyMemory?.runLlmCorrectionExtractor !== false) {
+                        const output = await callChat(
+                            [
+                                {
+                                    role: 'system',
+                                    content: 'You extract user correction and steering memory. Return only the requested labeled fields.',
+                                },
+                                {
+                                    role: 'user',
+                                    content: buildUserReplyMemoryPrompt(userMessageText, currentState),
+                                },
+                            ],
+                            {
+                                useClassifierBackend: getLlmSettings().classifierUseSeparateBackend === true,
+                                max_tokens: getLlmSettings().classifierMaxTokens ?? 80,
+                                temperature: Math.min(getLlmSettings().classifierTemperature ?? 0.1, 0.1),
+                            },
+                        );
+
+                        memory = parseUserReplyMemoryOutput(output);
+                    } else {
+                        memory = {
+                            correction: 'yes',
+                            state_changes: [],
+                            location: 'unknown',
+                            user_state: [],
+                            character_state: [],
+                            temporary_guidance: [],
+                            new_facts: [],
+                        };
+                    }
+
+                    const nextState = applyUserReplyMemoryToCurrentState(
+                        currentState || { ...DEFAULT_CURRENT_STATE, chat_id: getChatIdentity(context).chatId },
+                        memory,
+                        extension_settings[extensionName]?.userReplyMemory || defaultSettings.userReplyMemory,
+                    );
+                    nextState.chat_id = getChatIdentity(context).chatId;
+                    await saveCurrentState(nextState.chat_id, nextState);
+                    sceneTaggerState.memoryDebug.currentState = nextState;
+                    sceneTaggerState.memoryDebug.lastParserWarning = '';
+
+                    console.log(`[${extensionName}] applied user reply memory`, {
+                        userMessageText,
+                        memory,
+                        nextState,
+                    });
+                }
+            } catch (error) {
+                sceneTaggerState.memoryDebug.lastParserWarning = `user reply memory failed: ${error?.message || error}`;
+                console.warn(`[${extensionName}] user reply memory extraction failed`, error);
+            }
+        }
+
         console.log(`[${extensionName}] skipped latest message because it is missing or authored by user`, {
             currentIndex,
             hasMessage: !!message,

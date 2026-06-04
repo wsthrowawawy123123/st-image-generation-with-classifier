@@ -283,3 +283,14 @@ export const CLOTHING_STATE_ALIASES = {
 };
 
 export const PROMPT_VERSION = 'v2-router-explicit-tags';
+
+export const SOURCE_WEIGHTS = {
+    latest_user_message: 1.0,
+    user_correction: 1.0,
+    user_message: 0.9,
+    current_state: 0.8,
+    extracted_scene: 0.7,
+    assistant_message: 0.6,
+    canon_snapshot: 0.5,
+    old_summary: 0.4,
+};

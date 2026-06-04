@@ -120,6 +120,12 @@ export function createSceneTaggerUi({
     onMemorySettingsChanged,
     onClearCurrentChatMemory,
     onClearAllMemory,
+    onRefreshCanonSnapshot,
+    onViewCanonSnapshot,
+    onClearCanonSnapshot,
+    onCanonSettingsChanged,
+    onUserReplySettingsChanged,
+    onClearUserCorrections,
     onRequestPersistentStorage,
     onShowStorageUsage,
     onExportCurrentChatJson,
@@ -151,8 +157,11 @@ export function createSceneTaggerUi({
 
     function render() {
         const memorySettings = state.memorySettings || {};
+        const canonSettings = state.canonSettings || {};
+        const userReplySettings = state.userReplySettings || {};
         const memoryDebug = state.memoryDebug || {};
         const storageUsage = memoryDebug.storageUsage;
+        const currentState = memoryDebug.currentState || {};
 
         $root.html(`
             <div id="scene_tagger_panel">
@@ -205,16 +214,71 @@ export function createSceneTaggerUi({
                     <div class="st_scene_controls">
                         <button id="memory_clear_current_chat" class="menu_button" type="button">Clear Current Chat Memory</button>
                         <button id="memory_clear_all" class="menu_button" type="button">Clear All Memory</button>
+                        <button id="canon_refresh_current_chat" class="menu_button" type="button">Refresh Canon Snapshot</button>
+                        <button id="canon_view_current_chat" class="menu_button" type="button">View Canon Snapshot</button>
+                        <button id="canon_clear_current_chat" class="menu_button" type="button">Clear Canon Snapshot</button>
+                        <button id="memory_clear_user_corrections" class="menu_button" type="button">Clear User Corrections</button>
                         <button id="memory_request_persistent_storage" class="menu_button" type="button">Request Persistent Storage</button>
                         <button id="memory_show_storage_usage" class="menu_button" type="button">Show Storage Usage</button>
+                    </div>
+                    <div class="st_scene_controls">
+                        <label class="stimg_checkbox_row">
+                            <span>Enable canon snapshot</span>
+                            <input id="canon_enabled" type="checkbox" class="checkbox" ${canonSettings.canonEnabled ? 'checked' : ''}>
+                        </label>
+                        <label class="stimg_checkbox_row">
+                            <span>Refresh canon on chat load</span>
+                            <input id="canon_refresh_on_chat_load" type="checkbox" class="checkbox" ${canonSettings.refreshCanonOnChatLoad ? 'checked' : ''}>
+                        </label>
+                        <label class="stimg_checkbox_row">
+                            <span>Include canon in memory block</span>
+                            <input id="canon_include_in_memory_block" type="checkbox" class="checkbox" ${canonSettings.includeCanonInMemoryBlock ? 'checked' : ''}>
+                        </label>
+                        <input id="canon_max_chars" class="text_pole widthNatural" type="number" min="100" step="50" value="${escapeHtml(canonSettings.maxCanonChars || 600)}" placeholder="Max canon chars">
+                    </div>
+                    <div class="st_scene_controls">
+                        <label class="stimg_checkbox_row">
+                            <span>Enable user correction detection</span>
+                            <input id="user_reply_memory_enabled" type="checkbox" class="checkbox" ${userReplySettings.userReplyMemoryEnabled ? 'checked' : ''}>
+                        </label>
+                        <label class="stimg_checkbox_row">
+                            <span>Use regex correction detection</span>
+                            <input id="user_reply_detect_corrections_regex" type="checkbox" class="checkbox" ${userReplySettings.detectCorrectionsWithRegex ? 'checked' : ''}>
+                        </label>
+                        <label class="stimg_checkbox_row">
+                            <span>Run LLM correction extractor</span>
+                            <input id="user_reply_run_llm_extractor" type="checkbox" class="checkbox" ${userReplySettings.runLlmCorrectionExtractor ? 'checked' : ''}>
+                        </label>
+                        <label class="stimg_checkbox_row">
+                            <span>Show user corrections in memory block</span>
+                            <input id="user_reply_show_corrections_in_prompt" type="checkbox" class="checkbox" ${userReplySettings.showUserCorrectionsInPrompt ? 'checked' : ''}>
+                        </label>
+                        <input id="user_reply_max_assertions" class="text_pole widthNatural" type="number" min="1" step="1" value="${escapeHtml(userReplySettings.maxUserAssertions || 20)}" placeholder="Max user assertions">
+                        <input id="user_reply_max_guidance" class="text_pole widthNatural" type="number" min="1" step="1" value="${escapeHtml(userReplySettings.maxTemporaryGuidance || 10)}" placeholder="Max temp guidance">
                     </div>
                     <div class="st_scene_status">
                         Storage: ${storageUsage?.percentUsed != null ? `${escapeHtml(storageUsage.percentUsed)}% (${escapeHtml(storageUsage.usage)} / ${escapeHtml(storageUsage.quota)})` : 'unknown'}
                     </div>
                     <div class="st_memory_debug">
                         <div>
+                            <div><strong>Canon snapshot</strong></div>
+                            <pre>${escapeHtml(JSON.stringify(memoryDebug.canonSnapshot || null, null, 2))}</pre>
+                        </div>
+                        <div>
                             <div><strong>Current state JSON</strong></div>
-                            <pre>${escapeHtml(JSON.stringify(memoryDebug.currentState || null, null, 2))}</pre>
+                            <pre>${escapeHtml(JSON.stringify(currentState || null, null, 2))}</pre>
+                        </div>
+                        <div>
+                            <div><strong>User assertions</strong></div>
+                            <pre>${escapeHtml(JSON.stringify(currentState.user_assertions || [], null, 2))}</pre>
+                        </div>
+                        <div>
+                            <div><strong>Corrections</strong></div>
+                            <pre>${escapeHtml(JSON.stringify(currentState.corrections || [], null, 2))}</pre>
+                        </div>
+                        <div>
+                            <div><strong>Temporary guidance</strong></div>
+                            <pre>${escapeHtml(JSON.stringify(currentState.temporary_guidance || [], null, 2))}</pre>
                         </div>
                         <div>
                             <div><strong>Last injected memory block</strong></div>
@@ -262,6 +326,10 @@ export function createSceneTaggerUi({
         $('#scene_delete_archived_source').off('click').on('click', onDeleteArchivedSourceText);
         $('#memory_clear_current_chat').off('click').on('click', onClearCurrentChatMemory);
         $('#memory_clear_all').off('click').on('click', onClearAllMemory);
+        $('#canon_refresh_current_chat').off('click').on('click', onRefreshCanonSnapshot);
+        $('#canon_view_current_chat').off('click').on('click', onViewCanonSnapshot);
+        $('#canon_clear_current_chat').off('click').on('click', onClearCanonSnapshot);
+        $('#memory_clear_user_corrections').off('click').on('click', onClearUserCorrections);
         $('#memory_request_persistent_storage').off('click').on('click', onRequestPersistentStorage);
         $('#memory_show_storage_usage').off('click').on('click', onShowStorageUsage);
         $('#memory_enabled').off('change').on('change', function () {
@@ -281,6 +349,36 @@ export function createSceneTaggerUi({
         });
         $('#memory_debug_show').off('change').on('change', function () {
             onMemorySettingsChanged('debugShowMemoryBlock', $(this).prop('checked'));
+        });
+        $('#canon_enabled').off('change').on('change', function () {
+            onCanonSettingsChanged('canonEnabled', $(this).prop('checked'));
+        });
+        $('#canon_refresh_on_chat_load').off('change').on('change', function () {
+            onCanonSettingsChanged('refreshCanonOnChatLoad', $(this).prop('checked'));
+        });
+        $('#canon_include_in_memory_block').off('change').on('change', function () {
+            onCanonSettingsChanged('includeCanonInMemoryBlock', $(this).prop('checked'));
+        });
+        $('#canon_max_chars').off('input').on('input', function () {
+            onCanonSettingsChanged('maxCanonChars', Number($(this).val() || 600));
+        });
+        $('#user_reply_memory_enabled').off('change').on('change', function () {
+            onUserReplySettingsChanged('userReplyMemoryEnabled', $(this).prop('checked'));
+        });
+        $('#user_reply_detect_corrections_regex').off('change').on('change', function () {
+            onUserReplySettingsChanged('detectCorrectionsWithRegex', $(this).prop('checked'));
+        });
+        $('#user_reply_run_llm_extractor').off('change').on('change', function () {
+            onUserReplySettingsChanged('runLlmCorrectionExtractor', $(this).prop('checked'));
+        });
+        $('#user_reply_show_corrections_in_prompt').off('change').on('change', function () {
+            onUserReplySettingsChanged('showUserCorrectionsInPrompt', $(this).prop('checked'));
+        });
+        $('#user_reply_max_assertions').off('input').on('input', function () {
+            onUserReplySettingsChanged('maxUserAssertions', Number($(this).val() || 20));
+        });
+        $('#user_reply_max_guidance').off('input').on('input', function () {
+            onUserReplySettingsChanged('maxTemporaryGuidance', Number($(this).val() || 10));
         });
 
         $('#scene_tagger_panel').off('change.sceneFilters input.sceneFilters');
