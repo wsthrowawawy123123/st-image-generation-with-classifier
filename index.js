@@ -206,6 +206,13 @@ function updateUI() {
         $('#llm_analysis_prompt_temperature').val(
             extension_settings[extensionName].llmAnalysis.promptTemperature,
         );
+        $('#llm_analysis_cooldown_enabled').prop(
+            'checked',
+            extension_settings[extensionName].llmAnalysis.cooldown?.enabled === true,
+        );
+        $('#llm_analysis_cooldown_messages').val(
+            extension_settings[extensionName].llmAnalysis.cooldown?.messages,
+        );
         $('#llm_analysis_prompt_sanitizer_enabled').prop(
             'checked',
             extension_settings[extensionName].llmAnalysis.promptSanitizer?.enabled === true,
@@ -335,6 +342,19 @@ async function createSettings(settingsHtml) {
 
     $('#llm_analysis_prompt_temperature').on('input', function () {
         extension_settings[extensionName].llmAnalysis.promptTemperature = Number($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#llm_analysis_cooldown_enabled').on('change', function () {
+        extension_settings[extensionName].llmAnalysis.cooldown.enabled = $(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#llm_analysis_cooldown_messages').on('input', function () {
+        const rawValue = Number($(this).val());
+        extension_settings[extensionName].llmAnalysis.cooldown.messages = Number.isFinite(rawValue)
+            ? Math.max(0, Math.floor(rawValue))
+            : 0;
         saveSettingsDebounced();
     });
 
