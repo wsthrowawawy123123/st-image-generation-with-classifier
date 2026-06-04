@@ -9,9 +9,18 @@ import {
     NSFW_STATE_LABELS,
 } from './labels.js';
 
+function getSpecificContinuityDetails(continuitySource) {
+    return [
+        ...(continuitySource?.characters?.character?.prompt_details || []),
+        ...(continuitySource?.continuity_facts || []),
+    ]
+        .map(value => String(value || '').trim().toLowerCase())
+        .filter(Boolean)
+        .filter(value => value !== 'unknown' && value !== 'none');
+}
+
 function replaceGenericTagsWithContinuityDetails(tags, continuitySource) {
-    const details =
-        continuitySource?.characters?.character?.prompt_details || [];
+    const details = getSpecificContinuityDetails(continuitySource);
 
     if (!details.length) {
         return tags;
@@ -33,6 +42,7 @@ function replaceGenericTagsWithContinuityDetails(tags, continuitySource) {
 
     return [...details, ...filtered];
 }
+
 
 function extractContinuityAnchorValues(continuitySource) {
     if (!continuitySource || typeof continuitySource !== 'object') {
