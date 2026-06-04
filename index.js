@@ -40,6 +40,53 @@ let isImageAnalysisCall = false;
 const imageGenerationState = createImageGenerationState();
 let sceneMemory = createEmptySceneMemory();
 const getLlmSettings = () => extension_settings[extensionName]?.llmAnalysis || {};
+const BUILT_IN_PREFIX_PATHS = [
+    ['sd', 'common_prefix'],
+    ['sd', 'prompt_prefix'],
+    ['sd', 'positive_prefix'],
+    ['sd', 'prompts', 'common_prefix'],
+    ['sd', 'prompts', 'prompt_prefix'],
+    ['image_generation', 'common_prefix'],
+    ['image_generation', 'prompt_prefix'],
+    ['imageGeneration', 'common_prefix'],
+    ['imageGeneration', 'prompt_prefix'],
+    ['comfy', 'common_prefix'],
+    ['comfy', 'prompt_prefix'],
+];
+
+function getNestedStringValue(root, path) {
+    let current = root;
+
+    for (const segment of path) {
+        if (!current || typeof current !== 'object') {
+            return '';
+        }
+        current = current[segment];
+    }
+
+    return typeof current === 'string' ? current.trim() : '';
+}
+
+function resolveCommonPromptPrefix() {
+    for (const path of BUILT_IN_PREFIX_PATHS) {
+        const value = getNestedStringValue(extension_settings, path);
+        if (value) {
+            return {
+                value,
+                source: `built_in:${path.join('.')}`,
+            };
+        }
+    }
+
+    const localValue = typeof extension_settings[extensionName]?.commonPromptPrefix === 'string'
+        ? extension_settings[extensionName].commonPromptPrefix.trim()
+        : '';
+
+    return {
+        value: localValue,
+        source: localValue ? 'local_override' : 'none',
+    };
+}
 
 function movePromptPhraseItem(index, direction) {
     const phrases = extension_settings[extensionName]?.promptPhrases;
@@ -130,14 +177,18 @@ function savePromptPhraseItemsFromDom() {
 }
 
 function buildPromptFromPhrases(sceneTags) {
+    const commonPromptPrefix = resolveCommonPromptPrefix();
+
     return buildPromptFromPhraseItems(
         extension_settings[extensionName]?.promptPhrases,
         sceneTags,
+        commonPromptPrefix.value,
     );
 }
 
 const defaultSettings = {
     insertType: INSERT_TYPE.DISABLED,
+    commonPromptPrefix: '',
     promptPhrases: [],
     llmAnalysis: {
         enabled: true,
@@ -181,6 +232,9 @@ function updateUI() {
     if ($('#image_generation_insert_type').length) {
         $('#image_generation_insert_type').val(
             extension_settings[extensionName].insertType,
+        );
+        $('#common_prompt_prefix').val(
+            extension_settings[extensionName].commonPromptPrefix,
         );
 
         $('#llm_analysis_enabled').prop(
@@ -286,6 +340,10 @@ async function loadSettings() {
             extension_settings[extensionName].insertType = INSERT_TYPE.INLINE;
         }
 
+        if (typeof extension_settings[extensionName].commonPromptPrefix !== 'string') {
+            extension_settings[extensionName].commonPromptPrefix = defaultSettings.commonPromptPrefix;
+        }
+
         extension_settings[extensionName].promptPhrases = normalizePromptPhrases(
             extension_settings[extensionName].promptPhrases,
         );
@@ -307,6 +365,11 @@ async function createSettings(settingsHtml) {
     $('#image_generation_insert_type').on('change', function () {
         extension_settings[extensionName].insertType = $(this).val();
         updateUI();
+        saveSettingsDebounced();
+    });
+
+    $('#common_prompt_prefix').on('input', function () {
+        extension_settings[extensionName].commonPromptPrefix = String($(this).val() || '');
         saveSettingsDebounced();
     });
 
@@ -1000,10 +1063,17 @@ async function handleIncomingMessage() {
         return;
     }
 
-    const prompt = buildPromptFromPhrases(sceneTags);
+    const commonPromptPrefix = resolveCommonPromptPrefix();
+    const prompt = buildPromptFromPhraseItems(
+        extension_settings[extensionName]?.promptPhrases,
+        sceneTags,
+        commonPromptPrefix.value,
+    );
 
     console.log(`[${extensionName}] final SD prompt`, {
         prompt,
+        commonPromptPrefix: commonPromptPrefix.value,
+        commonPromptPrefixSource: commonPromptPrefix.source,
         promptPhrases: structuredClone(extension_settings[extensionName]?.promptPhrases || []),
         sceneTags,
     });

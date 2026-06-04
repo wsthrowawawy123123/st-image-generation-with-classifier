@@ -29,11 +29,23 @@ export function normalizePromptPhrases(items, options = {}) {
         }));
 }
 
-export function buildPromptFromPhrases(phrases, sceneTags) {
-    const orderedParts = normalizePromptPhrases(phrases)
-        .filter(item => item.enabled)
-        .map(item => item.text.trim())
-        .filter(Boolean);
+export function buildPromptFromPhrases(phrases, sceneTags, commonPromptPrefix = '') {
+    const orderedParts = [];
+
+    const cleanedPrefix = typeof commonPromptPrefix === 'string'
+        ? commonPromptPrefix.trim()
+        : '';
+
+    if (cleanedPrefix) {
+        orderedParts.push(cleanedPrefix);
+    }
+
+    orderedParts.push(
+        ...normalizePromptPhrases(phrases)
+            .filter(item => item.enabled)
+            .map(item => item.text.trim())
+            .filter(Boolean),
+    );
 
     const cleanedSceneTags = typeof sceneTags === 'string'
         ? sceneTags.replace(/^["'\s]+|["'\s]+$/g, '').replace(/\n/g, ' ').trim()

@@ -223,6 +223,22 @@
                 </label>
             </div>
 
+            <div class="marginTop10">
+                <div>
+                    <label for="common_prompt_prefix" class="flex1">
+                        Common Prompt Prefix
+                    </label>
+                </div>
+                <input
+                    id="common_prompt_prefix"
+                    name="common_prompt_prefix"
+                    class="text_pole"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="masterpiece, best quality, detailed lighting"
+                >
+            </div>
+
             <div class="flex-container flexnowrap flexGap10 alignitemscenter">
                 <label for="prompt_phrase_text_0" class="flex1">
                     Prompt Phrases
@@ -232,7 +248,7 @@
             </div>
 
             <small id="prompt-phrases-help">
-                Phrases are concatenated in order before the generated image prompt. Click Save Phrases after editing text.
+                The final prompt is built as: common prompt prefix, enabled prompt phrases in order, then the generated scene tags. Click Save Phrases after editing text.
             </small>
 
             <div id="prompt_items_container" class="marginTop10" aria-describedby="prompt-phrases-help"></div>

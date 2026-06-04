@@ -79,6 +79,21 @@ test('buildPromptFromPhrases preserves enabled order and appends cleaned scene t
     );
 });
 
+test('buildPromptFromPhrases prepends the common prompt prefix before phrases and scene tags', () => {
+    const prompt = buildPromptFromPhrases(
+        [
+            { id: 'a', enabled: true, text: 'soft natural lighting' },
+        ],
+        'kneeling pose',
+        'masterpiece, best quality',
+    );
+
+    assert.equal(
+        prompt,
+        'masterpiece, best quality, soft natural lighting, kneeling pose',
+    );
+});
+
 test('buildPromptFromPhrases returns only cleaned scene tags when no phrases are enabled', () => {
     const prompt = buildPromptFromPhrases(
         [
