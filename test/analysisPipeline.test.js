@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
     cleanSanitizedTagOutput,
+    injectConsistencyAnchorTags,
     safeParseJsonObject,
 } from '../src/analysisPipeline.js';
 
@@ -52,4 +53,30 @@ test('cleanSanitizedTagOutput strips outer emphasis and parenthesis wrappers fro
 test('cleanSanitizedTagOutput returns empty string for non-string input', () => {
     assert.equal(cleanSanitizedTagOutput(null), '');
     assert.equal(cleanSanitizedTagOutput(undefined), '');
+});
+
+test('injectConsistencyAnchorTags prepends stable clothing and pose when missing', () => {
+    assert.equal(
+        injectConsistencyAnchorTags(
+            'soft smile, warm lighting, office desk',
+            {
+                assistantClothing: 'white blouse, blue jeans',
+                assistantPose: 'sitting pose',
+            },
+        ),
+        'white blouse, blue jeans, sitting pose, soft smile, warm lighting, office desk',
+    );
+});
+
+test('injectConsistencyAnchorTags does not duplicate clothing or pose already present', () => {
+    assert.equal(
+        injectConsistencyAnchorTags(
+            'white blouse, blue jeans, sitting pose, soft smile',
+            {
+                assistantClothing: 'white blouse, blue jeans',
+                assistantPose: 'sitting pose',
+            },
+        ),
+        'white blouse, blue jeans, sitting pose, soft smile',
+    );
 });

@@ -40,6 +40,33 @@ export function cleanSanitizedTagOutput(raw) {
     return cleaned;
 }
 
+export function injectConsistencyAnchorTags(rawTags, sceneMemory) {
+    const cleanedTags = typeof rawTags === 'string'
+        ? rawTags.trim().replace(/^["']|["']$/g, '')
+        : '';
+
+    const parts = cleanedTags
+        ? cleanedTags.split(',').map(tag => tag.trim()).filter(Boolean)
+        : [];
+
+    const seen = new Set(parts.map(tag => tag.toLowerCase()));
+    const normalizedWholeString = cleanedTags.toLowerCase();
+    const consistencyAnchors = [
+        typeof sceneMemory?.assistantClothing === 'string' ? sceneMemory.assistantClothing.trim() : '',
+        typeof sceneMemory?.assistantPose === 'string' ? sceneMemory.assistantPose.trim() : '',
+    ].filter(Boolean);
+
+    for (const anchor of consistencyAnchors.reverse()) {
+        const normalized = anchor.toLowerCase();
+        if (!seen.has(normalized) && !normalizedWholeString.includes(normalized)) {
+            parts.unshift(anchor);
+            seen.add(normalized);
+        }
+    }
+
+    return parts.join(', ').replace(/\s+,/g, ',').trim();
+}
+
 export function createAnalysisPipeline({
     extensionName,
     getSettings,
@@ -261,6 +288,8 @@ export function createAnalysisPipeline({
         - do not invent details not clearly visible
         - preserve continuity with scene memory unless explicitly changed
         - include stable clothing, pose, environment, props, and lighting details from scene memory when they are still visually relevant
+        - prioritize assistantClothing and assistantPose as the strongest continuity anchors unless the CURRENT assistant reply clearly changes them
+        - if scene memory already defines clothing or body position, keep those exact visual details in the output whenever they are still compatible with the current moment
 
         Perspective rule:
         If the narration addresses "you" or is written from the assistant's point of view,
@@ -308,7 +337,10 @@ export function createAnalysisPipeline({
             },
         );
 
-        return sceneTags.trim().replace(/^["']|["']$/g, '');
+        return injectConsistencyAnchorTags(
+            sceneTags.trim().replace(/^["']|["']$/g, ''),
+            sceneMemory,
+        );
     }
 
     async function sanitizeImagePrompt(rawSceneTags, context) {
@@ -342,6 +374,8 @@ export function createAnalysisPipeline({
     - prefer natural photographic wording when lighting is ambiguous
     - prefer concrete visible nouns, poses, expressions, framing, clothing, props, and lighting
     - keep interaction tags only if they describe something directly visible, like holding hands or touching shoulder
+    - preserve assistantClothing and assistantPose from Scene memory whenever they still fit the current visible moment
+    - do not drop clear clothing or body-position tags just to shorten the list
     - drop inferred action, backstory, sequence, or transition language
     - drop abstract emotion labels like happy mood, affectionate mood, playful energy, romantic tension
     - drop non-visual bodily sensations or internal states like shaky legs, nervousness, arousal, anticipation
@@ -380,7 +414,10 @@ export function createAnalysisPipeline({
             },
         );
 
-        return cleanSanitizedTagOutput(result);
+        return injectConsistencyAnchorTags(
+            cleanSanitizedTagOutput(result),
+            sceneMemory,
+        );
     }
 
     return {

@@ -62,7 +62,7 @@ test('normalizePromptPhrases filters invalid entries and repairs missing ids', (
     assert.equal(phrases[2].text, '');
 });
 
-test('buildPromptFromPhrases preserves enabled order and appends cleaned scene tags', () => {
+test('buildPromptFromPhrases places cleaned scene tags before enabled phrases', () => {
     const prompt = buildPromptFromPhrases(
         [
             { id: 'a', enabled: true, text: 'soft natural lighting' },
@@ -75,11 +75,11 @@ test('buildPromptFromPhrases preserves enabled order and appends cleaned scene t
 
     assert.equal(
         prompt,
-        'soft natural lighting, matte skin, kneeling pose, looking up',
+        'kneeling pose, looking up, soft natural lighting, matte skin',
     );
 });
 
-test('buildPromptFromPhrases prepends the common prompt prefix before phrases and scene tags', () => {
+test('buildPromptFromPhrases appends the common prompt prefix after scene tags and phrases', () => {
     const prompt = buildPromptFromPhrases(
         [
             { id: 'a', enabled: true, text: 'soft natural lighting' },
@@ -90,7 +90,7 @@ test('buildPromptFromPhrases prepends the common prompt prefix before phrases an
 
     assert.equal(
         prompt,
-        'masterpiece, best quality, soft natural lighting, kneeling pose',
+        'kneeling pose, soft natural lighting, masterpiece, best quality',
     );
 });
 

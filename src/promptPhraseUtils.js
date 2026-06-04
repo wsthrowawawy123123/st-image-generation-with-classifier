@@ -32,13 +32,17 @@ export function normalizePromptPhrases(items, options = {}) {
 export function buildPromptFromPhrases(phrases, sceneTags, commonPromptPrefix = '') {
     const orderedParts = [];
 
+    const cleanedSceneTags = typeof sceneTags === 'string'
+        ? sceneTags.replace(/^["'\s]+|["'\s]+$/g, '').replace(/\n/g, ' ').trim()
+        : '';
+
+    if (cleanedSceneTags) {
+        orderedParts.push(cleanedSceneTags);
+    }
+
     const cleanedPrefix = typeof commonPromptPrefix === 'string'
         ? commonPromptPrefix.trim()
         : '';
-
-    if (cleanedPrefix) {
-        orderedParts.push(cleanedPrefix);
-    }
 
     orderedParts.push(
         ...normalizePromptPhrases(phrases)
@@ -47,12 +51,8 @@ export function buildPromptFromPhrases(phrases, sceneTags, commonPromptPrefix = 
             .filter(Boolean),
     );
 
-    const cleanedSceneTags = typeof sceneTags === 'string'
-        ? sceneTags.replace(/^["'\s]+|["'\s]+$/g, '').replace(/\n/g, ' ').trim()
-        : '';
-
-    if (cleanedSceneTags) {
-        orderedParts.push(cleanedSceneTags);
+    if (cleanedPrefix) {
+        orderedParts.push(cleanedPrefix);
     }
 
     return orderedParts.join(', ').replace(/\s+,/g, ',').trim();
