@@ -2,41 +2,68 @@ import { buildContinuityMemoryPrompt, buildNsfwExtractorPrompt, buildNormalizerP
 import { parseContinuityMemoryOutput, parseLabeledFields, parseRawExtractionFields } from './parser.js';
 import { PROMPT_VERSION } from './labels.js';
 import { normalizeNormalizedTags, normalizeRouterResult, normalizeSafetyTags, validateNormalizedTags, validateSafetyTags } from './validator.js';
+import {
+    ATTIRE_LABELS,
+    CLOTHING_STATE_LABELS,
+    POSE_LABELS,
+    NSFW_STATE_LABELS,
+} from './labels.js';
+
+function replaceGenericTagsWithContinuityDetails(tags, continuitySource) {
+    const details =
+        continuitySource?.characters?.character?.prompt_details || [];
+
+    if (!details.length) {
+        return tags;
+    }
+
+    const genericAttire = new Set(ATTIRE_LABELS);
+    const genericClothingTags = new Set(
+        CLOTHING_STATE_LABELS
+            .filter(v => v !== 'unknown' && v !== 'normal')
+            .map(v => `${v} clothing`)
+    );
+
+    const filtered = tags.filter(tag => {
+        const lower = String(tag || '').trim().toLowerCase();
+        if (genericAttire.has(lower)) return false;
+        if (genericClothingTags.has(lower)) return false;
+        return true;
+    });
+
+    return [...details, ...filtered];
+}
 
 function extractContinuityAnchorValues(continuitySource) {
     if (!continuitySource || typeof continuitySource !== 'object') {
         return [];
     }
 
-    if (
-        continuitySource.characters &&
-        typeof continuitySource.characters === 'object'
-    ) {
+    if (continuitySource.characters && typeof continuitySource.characters === 'object') {
         const character = continuitySource.characters.character || {};
+
         const parts = [
+            ...(Array.isArray(character.prompt_details) ? character.prompt_details : []),
             typeof character.attire === 'string' ? character.attire.trim() : '',
-            typeof character.clothing_state === 'string' && character.clothing_state !== 'unknown' && character.clothing_state !== 'normal'
+            typeof character.clothing_state === 'string' &&
+                character.clothing_state !== 'unknown' &&
+                character.clothing_state !== 'normal'
                 ? `${character.clothing_state.trim()} clothing`
                 : '',
             typeof character.pose === 'string' ? character.pose.trim() : '',
             ...(Array.isArray(character.state) ? character.state : []),
-            typeof continuitySource.current_location === 'string' ? continuitySource.current_location.trim() : '',
-            typeof continuitySource.current_setting === 'string' ? continuitySource.current_setting.trim() : '',
+            typeof continuitySource.current_location === 'string'
+                ? continuitySource.current_location.trim()
+                : '',
+            typeof continuitySource.current_setting === 'string'
+                ? continuitySource.current_setting.trim()
+                : '',
         ];
 
         return parts.filter(Boolean).filter(value => value !== 'unknown');
     }
 
-    return [
-        typeof continuitySource.assistantClothing === 'string' ? continuitySource.assistantClothing.trim() : '',
-        typeof continuitySource.assistantPose === 'string' ? continuitySource.assistantPose.trim() : '',
-        typeof continuitySource.assistantExpression === 'string' ? continuitySource.assistantExpression.trim() : '',
-        typeof continuitySource.interaction === 'string' ? continuitySource.interaction.trim() : '',
-        typeof continuitySource.environment === 'string' ? continuitySource.environment.trim() : '',
-        typeof continuitySource.location === 'string' ? continuitySource.location.trim() : '',
-        typeof continuitySource.lighting === 'string' ? continuitySource.lighting.trim() : '',
-        ...(Array.isArray(continuitySource.props) ? continuitySource.props : []),
-    ].filter(Boolean);
+    return [];
 }
 
 export function injectConsistencyAnchorTags(rawTags, continuitySource) {
@@ -132,12 +159,14 @@ export function imageTagsToSceneTags(imageTags, continuitySource = null) {
         return '';
     }
 
-    const deduped = [...new Set(
+    let deduped = [...new Set(
         imageTags
             .filter(value => typeof value === 'string')
             .map(value => value.trim().toLowerCase())
-            .filter(value => value && value !== 'unknown' && value !== 'none'),
+            .filter(value => value && value !== 'unknown' && value !== 'none')
     )];
+
+    deduped = replaceGenericTagsWithContinuityDetails(deduped, continuitySource);
 
     return injectConsistencyAnchorTags(deduped.join(', '), continuitySource);
 }

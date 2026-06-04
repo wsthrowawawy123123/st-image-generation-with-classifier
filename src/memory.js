@@ -16,12 +16,14 @@ export const DEFAULT_CURRENT_STATE = {
             attire: 'unknown',
             clothing_state: 'unknown',
             state: [],
+            prompt_details: [],
         },
         character: {
             pose: 'unknown',
             attire: 'unknown',
             clothing_state: 'unknown',
             state: [],
+            prompt_details: [],
         },
     },
     last_action: 'unknown',
@@ -88,11 +90,27 @@ function matchingStates(values) {
 }
 
 function parseCharacterState(values = []) {
+    const normalizedValues = dedupeFacts(values);
+    const knownPose = new Set(POSE_LABELS);
+    const knownAttire = new Set(ATTIRE_LABELS);
+    const knownClothing = new Set(CLOTHING_STATE_LABELS);
+    const knownState = new Set(NSFW_STATE_LABELS);
+
+    const promptDetails = normalizedValues.filter(value =>
+        value &&
+        value !== 'unknown' &&
+        !knownPose.has(value) &&
+        !knownAttire.has(value) &&
+        !knownClothing.has(value) &&
+        !knownState.has(value)
+    );
+
     return {
-        pose: firstMatching(values, POSE_LABELS),
-        attire: firstMatching(values, ATTIRE_LABELS),
-        clothing_state: firstMatching(values, CLOTHING_STATE_LABELS),
-        state: matchingStates(values),
+        pose: firstMatching(normalizedValues, POSE_LABELS),
+        attire: firstMatching(normalizedValues, ATTIRE_LABELS),
+        clothing_state: firstMatching(normalizedValues, CLOTHING_STATE_LABELS),
+        state: matchingStates(normalizedValues),
+        prompt_details: promptDetails,
     };
 }
 
@@ -100,8 +118,14 @@ function mergeCharacterState(current, incoming) {
     return {
         pose: incoming.pose !== 'unknown' ? incoming.pose : (current?.pose || 'unknown'),
         attire: incoming.attire !== 'unknown' ? incoming.attire : (current?.attire || 'unknown'),
-        clothing_state: incoming.clothing_state !== 'unknown' ? incoming.clothing_state : (current?.clothing_state || 'unknown'),
+        clothing_state: incoming.clothing_state !== 'unknown'
+            ? incoming.clothing_state
+            : (current?.clothing_state || 'unknown'),
         state: dedupeFacts([...(current?.state || []), ...(incoming.state || [])]),
+        prompt_details: dedupeFacts([
+            ...(current?.prompt_details || []),
+            ...(incoming?.prompt_details || []),
+        ]).slice(-8),
     };
 }
 
@@ -113,14 +137,14 @@ export function applyContinuityMemoryToCurrentState(currentState, memoryOutput, 
     const userState = mergeCharacterState(base.characters?.user, parseCharacterState(memory.user_state));
     const characterState = mergeCharacterState(base.characters?.character, parseCharacterState(memory.character_state));
 
-    if (normalized.pose && normalized.pose !== 'unknown' && userState.pose === 'unknown') {
-        userState.pose = normalized.pose;
+    if (normalized.pose && normalized.pose !== 'unknown' && characterState.pose === 'unknown') {
+        characterState.pose = normalized.pose;
     }
-    if (normalized.attire && normalized.attire !== 'unknown' && userState.attire === 'unknown') {
-        userState.attire = normalized.attire;
+    if (normalized.attire && normalized.attire !== 'unknown' && characterState.attire === 'unknown') {
+        characterState.attire = normalized.attire;
     }
-    if (normalized.clothing_state && normalized.clothing_state !== 'unknown' && userState.clothing_state === 'unknown') {
-        userState.clothing_state = normalized.clothing_state;
+    if (normalized.clothing_state && normalized.clothing_state !== 'unknown' && characterState.clothing_state === 'unknown') {
+        characterState.clothing_state = normalized.clothing_state;
     }
 
     return {

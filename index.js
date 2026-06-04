@@ -2035,13 +2035,23 @@ async function handleIncomingMessage() {
 
     let sceneTags = '';
 
+    const continuityFallbackTags =
+        continuityStateForImage?.characters?.character?.prompt_details?.length
+            ? imageTagsToSceneTags([], continuityStateForImage)
+            : '';
+
     if (Array.isArray(sceneEval.imageTags) && sceneEval.imageTags.length > 0) {
         sceneTags = imageTagsToSceneTags(sceneEval.imageTags, continuityStateForImage);
         console.log(`[${extensionName}] using image tags from router pipeline`, {
             currentIndex,
             imageTags: sceneEval.imageTags,
-            normalized: sceneEval.normalized,
-            safetyTags: sceneEval.safetyTags,
+            continuityStateForImage,
+            sceneTags,
+        });
+    } else if (continuityFallbackTags) {
+        sceneTags = continuityFallbackTags;
+        console.log(`[${extensionName}] using continuity fallback tags`, {
+            currentIndex,
             continuityStateForImage,
             sceneTags,
         });
