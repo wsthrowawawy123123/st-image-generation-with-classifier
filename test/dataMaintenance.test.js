@@ -33,6 +33,26 @@ test('repairCurrentState normalizes lists and preserves compact character detail
     assert.deepEqual(repaired.continuity_facts, ['scene is in closet']);
 });
 
+test('repairCurrentState removes stale contradictory pose and clothing state values', () => {
+    const repaired = repairCurrentState({
+        chat_id: 'chat-1',
+        location: ' Office ',
+        setting: ' Office ',
+        characters: {
+            character: {
+                pose: ' Standing ',
+                attire: ' Shirt ',
+                clothing_state: ' Open ',
+                state: ['lying', 'standing', 'clothing normal', 'open', 'focused'],
+            },
+        },
+    });
+
+    assert.equal(repaired.location, 'office');
+    assert.equal(repaired.current_location, 'office');
+    assert.deepEqual(repaired.characters.character.state, ['standing', 'open', 'focused']);
+});
+
 test('repairSceneRecord normalizes tags and rebuilds image tags', () => {
     const repaired = repairSceneRecord({
         scene_id: 'scene-1',

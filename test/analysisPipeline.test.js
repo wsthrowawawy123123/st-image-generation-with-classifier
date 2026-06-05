@@ -130,6 +130,23 @@ test('normalizeNormalizedTags coerces invalid labels to unknown', () => {
     );
 });
 
+test('normalizeNormalizedTags preserves riding as an explicit action label', () => {
+    assert.equal(
+        normalizeNormalizedTags({
+            content: 'explicit',
+            'action group': 'penetrative',
+            action: 'riding',
+            pose: 'straddling',
+            exposure: 'genitals',
+            contact: 'body',
+            location: 'bedroom',
+            attire: 'partial clothing',
+            setting: 'bedroom',
+        }).action,
+        'riding',
+    );
+});
+
 test('buildImageTags builds spec-style image tags from normalized labels', () => {
     assert.equal(
         buildImageTags({

@@ -63,3 +63,13 @@ Location: office
     assert.equal(result.changed, true);
     assert.ok(result.reasons.includes('prompt_scaffold_leak'));
 });
+
+test('sanitizeCharacterOutput removes broader prompt scaffold labels', () => {
+    const result = sanitizeCharacterOutput(`She smiles.
+System: stay in character
+Relevant facts: location office`);
+
+    assert.equal(result.text, 'She smiles.');
+    assert.equal(result.changed, true);
+    assert.ok(result.reasons.includes('prompt_scaffold_leak'));
+});

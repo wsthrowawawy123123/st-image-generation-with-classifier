@@ -1,6 +1,11 @@
 import { buildImageTags } from './taggingPipeline.js';
 import { normalizeNormalizedTags, normalizeSafetyTags } from './validator.js';
 import { dedupeFacts } from './memory.js';
+import { ATTIRE_LABELS, CLOTHING_STATE_LABELS, POSE_LABELS } from './labels.js';
+
+const POSE_SET = new Set(POSE_LABELS.filter(value => value !== 'unknown'));
+const CLOTHING_STATE_SET = new Set(CLOTHING_STATE_LABELS.filter(value => value !== 'unknown'));
+const ATTIRE_SET = new Set(ATTIRE_LABELS.filter(value => value !== 'unknown'));
 
 function cleanString(value) {
     return String(value || '')
@@ -13,14 +18,45 @@ function cleanList(values, limit = Infinity) {
     return dedupeFacts(Array.isArray(values) ? values.map(cleanString) : []).slice(-limit);
 }
 
+function removeContradictoryStateValues(values, character) {
+    const pose = cleanString(character.pose);
+    const attire = cleanString(character.attire);
+    const clothingState = cleanString(character.clothing_state);
+
+    return values.filter(value => {
+        if (POSE_SET.has(value) && pose && pose !== 'unknown' && value !== pose) {
+            return false;
+        }
+
+        if (ATTIRE_SET.has(value) && attire && attire !== 'unknown' && value !== attire) {
+            return false;
+        }
+
+        if (CLOTHING_STATE_SET.has(value) && clothingState && clothingState !== 'unknown' && value !== clothingState) {
+            return false;
+        }
+
+        if (value === 'clothing normal' && clothingState && clothingState !== 'unknown' && clothingState !== 'normal') {
+            return false;
+        }
+
+        return true;
+    });
+}
+
 function cleanCharacterState(character = {}) {
-    return {
+    const cleaned = {
         ...character,
         pose: cleanString(character.pose) || 'unknown',
         attire: cleanString(character.attire) || 'unknown',
         clothing_state: cleanString(character.clothing_state) || 'unknown',
-        state: cleanList(character.state, 8),
         prompt_details: cleanList(character.prompt_details, 8),
+    };
+
+    cleaned.state = removeContradictoryStateValues(cleanList(character.state, 8), cleaned);
+
+    return {
+        ...cleaned,
     };
 }
 
@@ -31,8 +67,10 @@ export function repairCurrentState(currentState) {
 
     return {
         ...currentState,
-        current_location: cleanString(currentState.current_location) || 'unknown',
-        current_setting: cleanString(currentState.current_setting) || 'unknown',
+        location: cleanString(currentState.location || currentState.current_location) || 'unknown',
+        setting: cleanString(currentState.setting || currentState.current_setting) || 'unknown',
+        current_location: cleanString(currentState.current_location || currentState.location) || 'unknown',
+        current_setting: cleanString(currentState.current_setting || currentState.setting) || 'unknown',
         current_scene: cleanString(currentState.current_scene) || 'unknown',
         characters: {
             user: cleanCharacterState(currentState.characters?.user),

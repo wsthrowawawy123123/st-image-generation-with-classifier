@@ -74,6 +74,20 @@ export function createAnalysisPipeline({
     function mapSceneRecordToSceneEval(sceneRecord) {
         const normalized = sceneRecord.normalized_tags;
         const safetyTags = sceneRecord.safety_tags;
+        const unknownFields = [
+            'content',
+            'action',
+            'pose',
+            'exposure',
+            'contact',
+            'location',
+            'attire',
+            'setting',
+        ].filter(field => ['unknown', '', null, undefined].includes(normalized?.[field]));
+        const classifierQuality = {
+            level: unknownFields.length >= 5 || normalized?.content === 'unknown' ? 'low' : unknownFields.length >= 3 ? 'medium' : 'high',
+            unknownFields,
+        };
 
         let category = 'dialogue_only';
         let weight = 0;
@@ -110,6 +124,7 @@ export function createAnalysisPipeline({
             routerResult: sceneRecord.router_result,
             rawExtraction: sceneRecord.raw_extraction,
             normalized,
+            classifierQuality,
             imageTags: sceneRecord.image_tags,
             safetyTags,
             continuityMemory: sceneRecord.continuity_memory,

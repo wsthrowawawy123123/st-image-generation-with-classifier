@@ -36,6 +36,19 @@ test('preprocessForClassifierInput removes image and extension artifacts', () =>
     );
 });
 
+test('preprocessForClassifierInput removes leaked memory scaffolding', () => {
+    assert.equal(
+        preprocessForClassifierInput(`Assistant: hello
+[canon]
+Character: angi
+[/canon]
+[continuity state]
+Location: office
+[/continuity state]`),
+        'Assistant: hello',
+    );
+});
+
 test('sanitizeFinalImagePrompt caps tags and removes instructions or sentence-like tags', () => {
     assert.equal(
         sanitizeFinalImagePrompt(
@@ -43,5 +56,26 @@ test('sanitizeFinalImagePrompt caps tags and removes instructions or sentence-li
             { maxTags: 4 },
         ),
         'kneeling, tight white blouse, mouth contact',
+    );
+});
+
+test('sanitizeFinalImagePrompt preserves protected tokens and existing weights', () => {
+    assert.equal(
+        sanitizeFinalImagePrompt('<lora:FooBar:0.8>, (masterpiece:1.2), embedding:easynegative, kneeling'),
+        '<lora:FooBar:0.8>, (masterpiece:1.2), embedding:easynegative, kneeling',
+    );
+});
+
+test('sanitizeFinalImagePrompt adds randomized weight to explicit action tags', () => {
+    assert.equal(
+        sanitizeFinalImagePrompt('blowjob, riding, anal sex, kneeling', { rng: () => 0.99 }),
+        '(blowjob:1.3), (riding:1.3), (anal sex:1.3), kneeling',
+    );
+});
+
+test('sanitizeFinalImagePrompt can leave explicit action tags unweighted', () => {
+    assert.equal(
+        sanitizeFinalImagePrompt('blowjob, kneeling', { weightExplicitActions: false }),
+        'blowjob, kneeling',
     );
 });

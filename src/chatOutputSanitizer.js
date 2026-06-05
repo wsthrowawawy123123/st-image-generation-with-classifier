@@ -1,6 +1,6 @@
 const TERMINAL_PUNCTUATION_REGEX = /[.!?…)"'\]]$/;
 const TRAILING_CONNECTOR_REGEX = /\b(and|or|with|while|then|as|to|of|in|on|at|for|from|into|onto|by|but|because|that|which|who|wearing|holding|touching|running|moving|stepping)$/i;
-const LEAKED_BLOCK_MARKER_REGEX = /(?:^|\n)\s*(?:continuity\s+state\s*:|\[canon\]|\[continuity\s+(?:state|override)\]|use these facts as (?:the )?(?:current scene state|current canon))/i;
+const LEAKED_BLOCK_MARKER_REGEX = /(?:^|\n)\s*(?:continuity\s+state\s*:|\[canon\]|\[continuity\s+(?:state|override)\]|use these facts as (?:the )?(?:current scene state|current canon)|(?:system|instruction|memory|current scene|relevant facts|assistant should)\s*:)/i;
 const CLOSED_LEAKED_BLOCK_REGEXES = [
     /\s*\[canon\][\s\S]*?\[\/canon\]\s*/gi,
     /\s*\[continuity\s+state\][\s\S]*?\[\/continuity\s+state\]\s*/gi,

@@ -53,6 +53,7 @@ export const NSFW_ACTION_LABELS = [
     'vaginal sex',
     'anal sex',
     'intercourse',
+    'riding',
     'masturbation',
     'mutual masturbation',
     'fingering',
@@ -65,7 +66,7 @@ export const NSFW_ACTION_GROUPS = {
     sensual: ['flirting', 'kissing', 'touching', 'fondling', 'undressing', 'posing', 'grinding'],
     oral: ['blowjob', 'cunnilingus', 'oral sex'],
     manual: ['handjob', 'fingering', 'masturbation', 'mutual masturbation'],
-    penetrative: ['vaginal sex', 'anal sex', 'intercourse'],
+    penetrative: ['vaginal sex', 'anal sex', 'intercourse', 'riding'],
     dynamic: ['restraint', 'aftercare'],
     unknown: ['unknown'],
 };
@@ -77,6 +78,7 @@ export const NSFW_ACTION_ALIASES = {
     fingering: ['fingering', 'manual penetration'],
     'vaginal sex': ['vaginal sex', 'penetrative sex', 'intercourse'],
     'anal sex': ['anal sex', 'anal penetration'],
+    riding: ['riding', 'riding position', 'on top'],
     masturbation: ['masturbation', 'self stimulation'],
     'mutual masturbation': ['mutual masturbation'],
 };
