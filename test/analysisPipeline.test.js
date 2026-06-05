@@ -260,7 +260,7 @@ test('injectConsistencyAnchorTags prepends stable clothing and pose when missing
                 current_setting: 'office',
             },
         ),
-        'soft smile, warm lighting, office desk, sitting pose, open clothing, white blouse',
+        'soft smile, warm lighting, office desk, white blouse, open clothing, sitting pose',
     );
 });
 

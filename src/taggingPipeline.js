@@ -198,10 +198,15 @@ export function injectConsistencyAnchorTags(rawTags, continuitySource) {
     const normalizedWholeString = cleanedTags.toLowerCase();
     const consistencyAnchors = extractContinuityAnchorValues(continuitySource);
 
-    for (const anchor of consistencyAnchors.reverse()) {
-        const normalized = anchor.toLowerCase();
+    for (const anchor of cleanPromptTags(consistencyAnchors)) {
+        const normalized = cleanPromptTag(anchor);
+
+        if (!normalized || isBadPromptTag(normalized)) {
+            continue;
+        }
+
         if (!seen.has(normalized) && !normalizedWholeString.includes(normalized)) {
-            parts.push(anchor);
+            parts.push(normalized);
             seen.add(normalized);
         }
     }
