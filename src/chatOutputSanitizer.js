@@ -1,5 +1,11 @@
 const TERMINAL_PUNCTUATION_REGEX = /[.!?…)"'\]]$/;
 const TRAILING_CONNECTOR_REGEX = /\b(and|or|with|while|then|as|to|of|in|on|at|for|from|into|onto|by|but|because|that|which|who|wearing|holding|touching|running|moving|stepping)$/i;
+const LEAKED_BLOCK_MARKER_REGEX = /(?:^|\n)\s*(?:continuity\s+state\s*:|\[canon\]|\[continuity\s+(?:state|override)\]|use these facts as (?:the )?(?:current scene state|current canon))/i;
+const CLOSED_LEAKED_BLOCK_REGEXES = [
+    /\s*\[canon\][\s\S]*?\[\/canon\]\s*/gi,
+    /\s*\[continuity\s+state\][\s\S]*?\[\/continuity\s+state\]\s*/gi,
+    /\s*\[continuity\s+override\][\s\S]*?\[\/continuity\s+override\]\s*/gi,
+];
 
 function normalizeForRepeat(value) {
     return String(value || '')
@@ -90,6 +96,24 @@ function trimDanglingFragment(text) {
     return clean;
 }
 
+function removeLeakedPromptBlocks(text) {
+    let next = String(text || '');
+
+    for (const regex of CLOSED_LEAKED_BLOCK_REGEXES) {
+        next = next.replace(regex, '\n');
+    }
+
+    const leakedMarker = next.search(LEAKED_BLOCK_MARKER_REGEX);
+    if (leakedMarker !== -1) {
+        next = next.slice(0, leakedMarker);
+    }
+
+    return next
+        .replace(/[ \t]*\n+[ \t]*/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+}
+
 export function sanitizeCharacterOutput(text) {
     if (typeof text !== 'string' || !text.trim()) {
         return {
@@ -101,6 +125,12 @@ export function sanitizeCharacterOutput(text) {
 
     const reasons = [];
     let next = text.trim();
+
+    const leakedPromptCleaned = removeLeakedPromptBlocks(next);
+    if (leakedPromptCleaned !== next) {
+        reasons.push('prompt_scaffold_leak');
+        next = leakedPromptCleaned;
+    }
 
     const repeatedWordsCleaned = next.replace(/\b([A-Za-z][\w'-]*)(\s+\1\b){1,}/gi, '$1');
     if (repeatedWordsCleaned !== next) {

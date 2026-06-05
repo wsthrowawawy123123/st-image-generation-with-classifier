@@ -33,3 +33,33 @@ test('sanitizeCharacterOutput keeps normal unpunctuated replies intact', () => {
     assert.equal(result.text, 'She gives you a quiet nod');
     assert.equal(result.changed, false);
 });
+
+test('sanitizeCharacterOutput removes leaked continuity blocks from visible replies', () => {
+    const result = sanitizeCharacterOutput(`She turns back toward you and lowers her voice.
+Continuity State: [canon]
+Character: angi li
+[/canon]
+[continuity state]
+Use these facts as the current scene state.
+Location: office
+Last action`);
+
+    assert.equal(result.text, 'She turns back toward you and lowers her voice.');
+    assert.equal(result.changed, true);
+    assert.ok(result.reasons.includes('prompt_scaffold_leak'));
+});
+
+test('sanitizeCharacterOutput removes closed canon and continuity blocks without dropping prose', () => {
+    const result = sanitizeCharacterOutput(`She nods.
+[canon]
+Character: angi li
+[/canon]
+Then she smiles.
+[continuity state]
+Location: office
+[/continuity state]`);
+
+    assert.equal(result.text, 'She nods. Then she smiles.');
+    assert.equal(result.changed, true);
+    assert.ok(result.reasons.includes('prompt_scaffold_leak'));
+});
