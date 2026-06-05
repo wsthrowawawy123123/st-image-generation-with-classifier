@@ -9,6 +9,42 @@ import {
     NSFW_STATE_LABELS,
 } from './labels.js';
 
+function compactPromptTag(value) {
+    let clean = cleanPromptTag(value);
+
+    const replacements = new Map([
+        ['tight white button up', 'tight white button-up blouse'],
+        ['tight white button', 'tight white button-up blouse'],
+        ['assistant wearing tight white button up', 'tight white button-up blouse'],
+        ['assistant wearing tight white button-up blouse', 'tight white button-up blouse'],
+        ['black mini skirt', 'black miniskirt'],
+        ['matching high', 'black high heels'],
+        ['and matching high', 'black high heels'],
+    ]);
+
+    if (replacements.has(clean)) {
+        return replacements.get(clean);
+    }
+
+    // Remove weak leading filler words.
+    clean = clean
+        .replace(/^assistant\s+/, '')
+        .replace(/^character\s+/, '')
+        .replace(/^the\s+/, '')
+        .replace(/^a\s+/, '');
+
+    // Trim overly wordy continuity phrasing.
+    clean = clean
+        .replace(/^scene is in\s+/, '')
+        .replace(/^current location is\s+/, '')
+        .replace(/^current setting is\s+/, '')
+        .replace(/^character is\s+/, '')
+        .replace(/^assistant is\s+/, '')
+        .replace(/^user is\s+/, '');
+
+    return clean.trim();
+}
+
 function cleanPromptTag(value) {
     return String(value || '')
         .trim()
@@ -27,32 +63,163 @@ function isBadPromptTag(value) {
         return true;
     }
 
-    if (/^(and|or|with|plus|matching)\b/.test(clean)) {
+    // Broken fragments / connector words.
+    if (/^(and|or|with|plus|matching|while|then|as|when|where)\b/.test(clean)) {
         return true;
     }
 
-    if (/\b(and|or|with|plus)$/.test(clean)) {
+    if (/\b(and|or|with|plus|while|then|as|when|where|of|to|from|in|on|at|for)$/.test(clean)) {
         return true;
     }
 
-    if ([
+    // Too generic for image prompting.
+    const genericTags = new Set([
         'wearing',
+        'wears',
         'clothes',
         'clothing',
         'outfit',
-        'partial clothing',
+        'attire',
+        'garment',
+        'garments',
+        'fabric',
         'normal',
-        'clothing normal',
+        'default',
+        'regular',
+        'usual',
+        'same',
+        'current',
+        'visible',
+        'body',
+        'skin',
+        'hair',
+        'face',
+        'eyes',
+        'hands',
+        'arms',
+        'legs',
         'black',
+        'white',
+        'red',
+        'blue',
+        'green',
+        'pink',
         'tight',
+        'loose',
+        'small',
+        'large',
+        'short',
+        'long',
+        'partial clothing',
+        'normal clothing',
+        'clothing normal',
+        'clothing state normal',
+        'clothed',
+        'partially clothed',
+        'partially dressed',
+        'dressed',
+        'undressed',
+        'half dressed',
+    ]);
+
+    if (genericTags.has(clean)) {
+        return true;
+    }
+
+    // Roleplay/dialogue/action fragments that are not useful visual prompt tags.
+    const rpNoiseTags = new Set([
         'nuzz',
+        'nuzzle',
         'nuzzling',
         'nuzzling nose',
         'flirting',
+        'teasing',
+        'playful',
+        'playfully',
+        'excited',
+        'aroused',
+        'curious',
+        'surprised',
+        'embarrassed',
+        'shy',
+        'smiling',
+        'soft smile',
+        'grinning',
+        'giggle',
+        'giggling',
+        'laughing',
+        'moaning',
+        'whispering',
+        'talking',
+        'speaking',
+        'dialogue',
+        'conversation',
+        'eye contact',
+        'looking',
+        'looking at',
+        'looking up',
+        'looking down',
         'hand on',
-        'wiggling eyebrows',
+        'hands on',
+        'touching',
         'running fingers along jawline',
-    ].includes(clean)) {
+        'wiggling eyebrows',
+        'raising eyebrows',
+        'raised eyebrow',
+        'leaning closer',
+        'moves closer',
+        'steps closer',
+    ]);
+
+    if (rpNoiseTags.has(clean)) {
+        return true;
+    }
+
+    // State/memory phrases that should not become SD tags.
+    const memoryNoiseTags = new Set([
+        'scene continues',
+        'continues',
+        'open thread',
+        'current scene',
+        'current setting',
+        'current location',
+        'last action',
+        'recent event',
+        'unknown scene',
+        'assistant',
+        'character',
+        'user',
+        'jason',
+        'she',
+        'he',
+        'they',
+        'i',
+        'me',
+        'you',
+        'her',
+        'him',
+    ]);
+
+    if (memoryNoiseTags.has(clean)) {
+        return true;
+    }
+
+    // Sentence-like continuity facts are usually too wordy/noisy.
+    if (/^(scene|setting|location|assistant|character|user)\s+(is|are|was|were|has|have)\b/.test(clean)) {
+        return true;
+    }
+
+    if (/^(the|a|an)\s+/.test(clean)) {
+        return true;
+    }
+
+    // Too wordy for a single prompt tag unless manually canonicalized earlier.
+    if (clean.split(/\s+/).length > 6) {
+        return true;
+    }
+
+    // Bad punctuation / malformed fragments.
+    if (/[.!?;:()[\]{}]/.test(clean)) {
         return true;
     }
 
@@ -64,7 +231,7 @@ function cleanPromptTags(values) {
     const result = [];
 
     for (const value of values || []) {
-        const clean = cleanPromptTag(value);
+        const clean = compactPromptTag(value);
 
         if (isBadPromptTag(clean)) {
             continue;
