@@ -15,7 +15,9 @@ import {
 } from './src/promptPhraseUtils.js';
 import {
     preprocessForImagePrompt,
+    preprocessForClassifierInput,
     buildFallbackSceneTags,
+    sanitizeFinalImagePrompt,
 } from './src/imagePromptText.js';
 import { sanitizeCharacterOutput } from './src/chatOutputSanitizer.js';
 import {
@@ -295,7 +297,7 @@ function getChatIdentity(context) {
 
 function formatMessageForSceneTagging(message) {
     const role = message?.is_user ? 'User' : 'Assistant';
-    const text = preprocessForImagePrompt(message?.mes || '');
+    const text = preprocessForClassifierInput(preprocessForImagePrompt(message?.mes || ''));
     return `${role}: ${text}`;
 }
 
@@ -1521,9 +1523,9 @@ function getImageAnalysisTextContext(context) {
         latestAssistant,
         latestUser,
         previousAssistant,
-        assistantText: preprocessForImagePrompt(latestAssistant),
-        latestUserText: preprocessForImagePrompt(latestUser),
-        previousAssistantText: preprocessForImagePrompt(previousAssistant),
+        assistantText: preprocessForClassifierInput(preprocessForImagePrompt(latestAssistant)),
+        latestUserText: preprocessForClassifierInput(preprocessForImagePrompt(latestUser)),
+        previousAssistantText: preprocessForClassifierInput(preprocessForImagePrompt(previousAssistant)),
     };
 }
 
@@ -1760,7 +1762,14 @@ async function sanitizeLatestAssistantMessage(context, message, messageIndex) {
         sanitized_at: new Date().toISOString(),
     };
 
-    updateMessageBlock(messageIndex, message, { rerenderMessage: true });
+    const messageElement = $(`.mes[mesid="${messageIndex}"]`);
+    if (messageElement.length) {
+        updateMessageBlock(messageIndex, message, { rerenderMessage: true });
+    } else {
+        console.warn(`[${extensionName}] skipped sanitized message rerender because DOM element was not ready`, {
+            messageIndex,
+        });
+    }
     await context.saveChat?.();
 
     console.log(`[${extensionName}] sanitized character output`, {
@@ -2168,7 +2177,7 @@ async function handleIncomingMessage() {
         sceneTags,
         commonPromptPrefix.value,
     );
-    const prompt = rawPrompt;
+    const prompt = sanitizeFinalImagePrompt(rawPrompt);
 
     console.log(`[${extensionName}] final SD prompt`, {
         rawPrompt,
