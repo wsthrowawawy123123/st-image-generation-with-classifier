@@ -381,6 +381,7 @@ function setSceneTaggerStatus(status) {
 }
 
 function syncSceneTaggerUiSettings() {
+    sceneTaggerState.sceneTaggerSettings = structuredClone(extension_settings[extensionName]?.sceneTagger || defaultSettings.sceneTagger);
     sceneTaggerState.memorySettings = structuredClone(extension_settings[extensionName]?.continuityMemory || defaultSettings.continuityMemory);
     sceneTaggerState.canonSettings = structuredClone(extension_settings[extensionName]?.canon || defaultSettings.canon);
     sceneTaggerState.userReplySettings = structuredClone(extension_settings[extensionName]?.userReplyMemory || defaultSettings.userReplyMemory);
@@ -1004,6 +1005,7 @@ async function createSettings(settingsHtml) {
         onEditScene: handleEditScene,
         onViewSource: handleViewSceneSource,
         onFiltersChanged: handleSceneFiltersChanged,
+        onSceneTaggerSettingsChanged: handleSceneTaggerSettingsChanged,
         onMemorySettingsChanged: handleMemorySettingsChanged,
         onClearCurrentChatMemory: handleClearCurrentChatMemory,
         onClearAllMemory: handleClearAllMemory,
@@ -1342,6 +1344,12 @@ function handleUserReplySettingsChanged(key, value) {
     syncSceneTaggerUiSettings();
     saveSettingsDebounced();
     refreshMemoryDebugState().catch(() => { });
+}
+
+function handleSceneTaggerSettingsChanged(key, value) {
+    extension_settings[extensionName].sceneTagger[key] = value;
+    syncSceneTaggerUiSettings();
+    saveSettingsDebounced();
 }
 
 async function handleClearCurrentChatMemory() {

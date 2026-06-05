@@ -117,6 +117,7 @@ export function createSceneTaggerUi({
     onEditScene,
     onViewSource,
     onFiltersChanged,
+    onSceneTaggerSettingsChanged,
     onMemorySettingsChanged,
     onClearCurrentChatMemory,
     onClearAllMemory,
@@ -156,6 +157,7 @@ export function createSceneTaggerUi({
     }
 
     function render() {
+        const sceneTaggerSettings = state.sceneTaggerSettings || {};
         const memorySettings = state.memorySettings || {};
         const canonSettings = state.canonSettings || {};
         const userReplySettings = state.userReplySettings || {};
@@ -186,6 +188,23 @@ export function createSceneTaggerUi({
                 <div class="st_scene_status" id="scene_tagger_status">${escapeHtml(state.status || 'Ready')}</div>
 
                 <div class="st_memory_panel">
+                    <div class="flex-container flexnowrap"><strong>Automation</strong></div>
+                    <div class="st_scene_controls">
+                        <label class="stimg_checkbox_row">
+                            <span>Sanitize character output</span>
+                            <input id="scene_tagger_sanitize_character_output" type="checkbox" class="checkbox" ${sceneTaggerSettings.sanitizeCharacterOutput ? 'checked' : ''}>
+                        </label>
+                        <label class="stimg_checkbox_row">
+                            <span>Auto-save generated scenes</span>
+                            <input id="scene_tagger_auto_save_generated_scenes" type="checkbox" class="checkbox" ${sceneTaggerSettings.autoSaveGeneratedScenes ? 'checked' : ''}>
+                        </label>
+                        <label class="stimg_checkbox_row">
+                            <span>Enable data maintenance</span>
+                            <input id="scene_tagger_data_maintenance_enabled" type="checkbox" class="checkbox" ${sceneTaggerSettings.dataMaintenanceEnabled ? 'checked' : ''}>
+                        </label>
+                        <input id="scene_tagger_data_maintenance_every_messages" class="text_pole widthNatural" type="number" min="1" step="1" value="${escapeHtml(sceneTaggerSettings.dataMaintenanceEveryMessages || 5)}" placeholder="Maintenance every N messages">
+                    </div>
+
                     <div class="flex-container flexnowrap"><strong>Continuity Memory</strong></div>
                     <div class="st_scene_controls">
                         <label class="stimg_checkbox_row">
@@ -334,6 +353,18 @@ export function createSceneTaggerUi({
         $('#memory_show_storage_usage').off('click').on('click', onShowStorageUsage);
         $('#memory_enabled').off('change').on('change', function () {
             onMemorySettingsChanged('memoryEnabled', $(this).prop('checked'));
+        });
+        $('#scene_tagger_sanitize_character_output').off('change').on('change', function () {
+            onSceneTaggerSettingsChanged('sanitizeCharacterOutput', $(this).prop('checked'));
+        });
+        $('#scene_tagger_auto_save_generated_scenes').off('change').on('change', function () {
+            onSceneTaggerSettingsChanged('autoSaveGeneratedScenes', $(this).prop('checked'));
+        });
+        $('#scene_tagger_data_maintenance_enabled').off('change').on('change', function () {
+            onSceneTaggerSettingsChanged('dataMaintenanceEnabled', $(this).prop('checked'));
+        });
+        $('#scene_tagger_data_maintenance_every_messages').off('input').on('input', function () {
+            onSceneTaggerSettingsChanged('dataMaintenanceEveryMessages', Number($(this).val() || 5));
         });
         $('#memory_mode').off('change').on('change', function () {
             onMemorySettingsChanged('memoryMode', String($(this).val() || 'light'));
