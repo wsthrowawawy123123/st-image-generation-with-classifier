@@ -147,6 +147,59 @@ test('buildImageTags builds spec-style image tags from normalized labels', () =>
     );
 });
 
+test('imageTagsToSceneTags keeps router image tags before continuity anchors', () => {
+    const prompt = imageTagsToSceneTags(
+        [
+            'blowjob',
+            'kneeling',
+            'mouth contact',
+            'genitals exposure',
+            'wet',
+            'messy',
+            'semen',
+            'mouth fluid',
+            'partial clothing',
+        ],
+        {
+            current_location: 'office',
+            current_setting: 'office',
+            characters: {
+                character: {
+                    pose: 'leaning',
+                    attire: 'partial clothing',
+                    clothing_state: 'normal',
+                    state: [],
+                    prompt_details: [
+                        'wiggling eyebrows',
+                        'nuzz',
+                        'clothing normal',
+                        'flirting',
+                        'hand on',
+                        'running fingers along jawline',
+                        'tight white button-up blouse',
+                    ],
+                },
+            },
+            continuity_facts: [
+                'assistant wearing tight white button up',
+                'black miniskirt',
+                'black stockings',
+                'and matching high',
+                '- assistant wearing tight white',
+                'tight white button',
+                'tight white button-up blouse',
+                'black',
+                'tight',
+            ],
+        },
+    );
+
+    assert.equal(
+        prompt,
+        'blowjob, kneeling, mouth contact, genitals exposure, wet, messy, semen, mouth fluid, tight white button-up blouse, tight white button up, black miniskirt, black stockings, tight white, tight white button, office, leaning, - assistant wearing tight white, and matching high, assistant wearing tight white button up, running fingers along jawline, hand on, flirting, clothing normal, nuzz, wiggling eyebrows',
+    );
+});
+
 test('imageTagsToSceneTags builds a compact tag string from image tags', () => {
     assert.equal(
         imageTagsToSceneTags([
@@ -157,7 +210,7 @@ test('imageTagsToSceneTags builds a compact tag string from image tags', () => {
             'partial clothing',
             'closet',
         ]),
-        'kissing, kneeling, mouth contact, chest exposure, partial clothing, closet',
+        'kissing, kneeling, mouth contact, chest exposure, closet',
     );
 });
 
@@ -207,7 +260,7 @@ test('injectConsistencyAnchorTags prepends stable clothing and pose when missing
                 current_setting: 'office',
             },
         ),
-        'white blouse, open clothing, sitting pose, soft smile, warm lighting, office desk',
+        'soft smile, warm lighting, office desk, sitting pose, open clothing, white blouse',
     );
 });
 

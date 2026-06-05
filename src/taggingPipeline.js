@@ -9,21 +9,90 @@ import {
     NSFW_STATE_LABELS,
 } from './labels.js';
 
+function cleanPromptTag(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/^-\s*/, '')
+        .replace(/\s+/g, ' ')
+        .replace(/^assistant wearing\s+/, '')
+        .replace(/^character wearing\s+/, '')
+        .replace(/^wearing\s+/, '');
+}
+
+function isBadPromptTag(value) {
+    const clean = cleanPromptTag(value);
+
+    if (!clean || clean === 'unknown' || clean === 'none') {
+        return true;
+    }
+
+    if (/^(and|or|with|plus|matching)\b/.test(clean)) {
+        return true;
+    }
+
+    if (/\b(and|or|with|plus)$/.test(clean)) {
+        return true;
+    }
+
+    if ([
+        'wearing',
+        'clothes',
+        'clothing',
+        'outfit',
+        'partial clothing',
+        'normal',
+        'clothing normal',
+        'black',
+        'tight',
+        'nuzz',
+        'nuzzling',
+        'nuzzling nose',
+        'flirting',
+        'hand on',
+        'wiggling eyebrows',
+        'running fingers along jawline',
+    ].includes(clean)) {
+        return true;
+    }
+
+    return false;
+}
+
+function cleanPromptTags(values) {
+    const seen = new Set();
+    const result = [];
+
+    for (const value of values || []) {
+        const clean = cleanPromptTag(value);
+
+        if (isBadPromptTag(clean)) {
+            continue;
+        }
+
+        if (seen.has(clean)) {
+            continue;
+        }
+
+        seen.add(clean);
+        result.push(clean);
+    }
+
+    return result;
+}
+
 function getSpecificContinuityDetails(continuitySource) {
-    return [
+    return cleanPromptTags([
         ...(continuitySource?.characters?.character?.prompt_details || []),
         ...(continuitySource?.continuity_facts || []),
-    ]
-        .map(value => String(value || '').trim().toLowerCase())
-        .filter(Boolean)
-        .filter(value => value !== 'unknown' && value !== 'none');
+    ]);
 }
 
 function replaceGenericTagsWithContinuityDetails(tags, continuitySource) {
     const details = getSpecificContinuityDetails(continuitySource);
 
     if (!details.length) {
-        return tags;
+        return cleanPromptTags(tags);
     }
 
     const genericAttire = new Set(ATTIRE_LABELS);
@@ -33,16 +102,16 @@ function replaceGenericTagsWithContinuityDetails(tags, continuitySource) {
             .map(v => `${v} clothing`)
     );
 
-    const filtered = tags.filter(tag => {
-        const lower = String(tag || '').trim().toLowerCase();
+    const filtered = cleanPromptTags(tags).filter(tag => {
+        const lower = cleanPromptTag(tag);
         if (genericAttire.has(lower)) return false;
         if (genericClothingTags.has(lower)) return false;
         return true;
     });
 
-    return [...details, ...filtered];
+    // Important: router/image tags stay first; continuity only fills in stable details after.
+    return cleanPromptTags([...filtered, ...details]);
 }
-
 
 function extractContinuityAnchorValues(continuitySource) {
     if (!continuitySource || typeof continuitySource !== 'object') {
@@ -132,7 +201,7 @@ export function injectConsistencyAnchorTags(rawTags, continuitySource) {
     for (const anchor of consistencyAnchors.reverse()) {
         const normalized = anchor.toLowerCase();
         if (!seen.has(normalized) && !normalizedWholeString.includes(normalized)) {
-            parts.unshift(anchor);
+            parts.push(anchor);
             seen.add(normalized);
         }
     }
