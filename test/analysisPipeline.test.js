@@ -196,8 +196,7 @@ test('imageTagsToSceneTags keeps router image tags before continuity anchors', (
 
     assert.equal(
         prompt,
-        'blowjob, kneeling, mouth contact, genitals exposure, wet, messy, semen, mouth fluid, tight white button-up blouse, tight white button up, black miniskirt, black stockings, tight white, tight white button, office, leaning, - assistant wearing tight white, and matching high, assistant wearing tight white button up, running fingers along jawline, hand on, flirting, clothing normal, nuzz, wiggling eyebrows',
-    );
+        'blowjob, kneeling, mouth contact, genitals exposure, wet, messy, semen, mouth fluid, tight white button-up blouse, black miniskirt, black stockings, black high heels, tight white, leaning, office');
 });
 
 test('imageTagsToSceneTags builds a compact tag string from image tags', () => {
