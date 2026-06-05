@@ -3,6 +3,7 @@ import {
     saveSettingsDebounced,
     eventSource,
     event_types,
+    updateMessageBlock,
 } from '../../../../script.js';
 import { appendMediaToMessage } from '../../../../script.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
@@ -16,6 +17,12 @@ import {
     preprocessForImagePrompt,
     buildFallbackSceneTags,
 } from './src/imagePromptText.js';
+import { sanitizeCharacterOutput } from './src/chatOutputSanitizer.js';
+import {
+    repairCurrentState,
+    repairMemoryEvent,
+    repairSceneRecord,
+} from './src/dataMaintenance.js';
 import { createChatCaller } from './src/chatBackends.js';
 import {
     applyContinuityMemoryToCurrentState,
@@ -49,6 +56,7 @@ import {
     getStorageUsage,
     importScenes,
     initDb,
+    repairChatData,
     saveCanonSnapshot,
     requestPersistentStorage,
     saveCurrentState,
@@ -79,6 +87,7 @@ const PHOTO_REQUEST_REGEX =
     /((send|show|lemme\s*see|let\s*me\s*see|i\s*wanna\s*see|i\s*want\s*to\s*see|can\s*i\s*see|got\s*a?|any)\s*(me\s*)?(a\s*)?(pic|photo|picture|selfie|image|shot)s?)|((take|snap|shoot)\s*(me\s*)?(a\s*)?(pic|photo|picture|selfie))/i;
 
 let isImageAnalysisCall = false;
+let isDataMaintenanceRunning = false;
 const imageGenerationState = createImageGenerationState();
 let sceneTaggerUi = null;
 const sceneTaggerState = {
@@ -581,6 +590,9 @@ const defaultSettings = {
     promptPhrases: [],
     sceneTagger: {
         autoSaveGeneratedScenes: true,
+        sanitizeCharacterOutput: true,
+        dataMaintenanceEnabled: true,
+        dataMaintenanceEveryMessages: 5,
     },
     continuityMemory: {
         ...DEFAULT_MEMORY_SETTINGS,
@@ -1724,6 +1736,85 @@ function safeParseJsonObject(raw) {
     return null;
 }
 
+async function sanitizeLatestAssistantMessage(context, message, messageIndex) {
+    if (extension_settings[extensionName]?.sceneTagger?.sanitizeCharacterOutput !== true) {
+        return message;
+    }
+
+    if (!message || message.is_user || typeof message.mes !== 'string') {
+        return message;
+    }
+
+    const originalText = message.mes;
+    const result = sanitizeCharacterOutput(originalText);
+    if (!result.changed) {
+        return message;
+    }
+
+    message.mes = result.text;
+    if (!message.extra) {
+        message.extra = {};
+    }
+    message.extra.stSceneTaggerSanitizedOutput = {
+        reasons: result.reasons,
+        sanitized_at: new Date().toISOString(),
+    };
+
+    updateMessageBlock(messageIndex, message, { rerenderMessage: true });
+    await context.saveChat?.();
+
+    console.log(`[${extensionName}] sanitized character output`, {
+        messageIndex,
+        reasons: result.reasons,
+        beforePreview: originalText.slice(0, 160),
+        afterPreview: result.text.slice(0, 160),
+    });
+
+    return message;
+}
+
+async function maybeRunDataMaintenance(context, messageIndex) {
+    const settings = extension_settings[extensionName]?.sceneTagger || {};
+    if (settings.dataMaintenanceEnabled === false) {
+        return;
+    }
+
+    const everyMessages = Math.max(1, Math.floor(Number(settings.dataMaintenanceEveryMessages || 5)));
+    if (messageIndex < 0 || (messageIndex + 1) % everyMessages !== 0) {
+        return;
+    }
+
+    if (isDataMaintenanceRunning) {
+        return;
+    }
+
+    isDataMaintenanceRunning = true;
+    try {
+        const { chatId } = getChatIdentity(context);
+        const result = await repairChatData(chatId, {
+            repairSceneRecord,
+            repairMemoryEvent,
+            repairCurrentState,
+        });
+
+        if (result.scenes || result.memory_events || result.current_states) {
+            await refreshSceneTaggerRecords().catch(() => { });
+            await refreshMemoryDebugState(context).catch(() => { });
+        }
+
+        console.log(`[${extensionName}] data maintenance pass completed`, {
+            chatId,
+            messageIndex,
+            everyMessages,
+            result,
+        });
+    } catch (error) {
+        console.warn(`[${extensionName}] data maintenance pass failed`, error);
+    } finally {
+        isDataMaintenanceRunning = false;
+    }
+}
+
 async function handleIncomingMessage() {
     if (isImageAnalysisCall) {
         console.log(`[${extensionName}] skipped MESSAGE_RECEIVED because analysis call is already in progress`);
@@ -1756,6 +1847,8 @@ async function handleIncomingMessage() {
             : null,
         messagePreview: typeof message?.mes === 'string' ? message.mes.trim().slice(0, 160) : '',
     });
+
+    await maybeRunDataMaintenance(context, currentIndex);
 
     if (!message || message.is_user) {
         if (message?.is_user && extension_settings[extensionName]?.userReplyMemory?.userReplyMemoryEnabled !== false) {
@@ -1840,6 +1933,8 @@ async function handleIncomingMessage() {
         message.extra.imageAutoGenerationProcessed = true;
         return;
     }
+
+    message = await sanitizeLatestAssistantMessage(context, message, currentIndex);
 
     const messageText = typeof message.mes === 'string' ? message.mes.trim() : '';
     if (!messageText) {
@@ -2035,10 +2130,9 @@ async function handleIncomingMessage() {
 
     let sceneTags = '';
 
-    const continuityFallbackTags =
-        continuityStateForImage?.characters?.character?.prompt_details?.length
-            ? imageTagsToSceneTags([], continuityStateForImage)
-            : '';
+    const continuityFallbackTags = continuityStateForImage
+        ? imageTagsToSceneTags([], continuityStateForImage)
+        : '';
 
     if (Array.isArray(sceneEval.imageTags) && sceneEval.imageTags.length > 0) {
         sceneTags = imageTagsToSceneTags(sceneEval.imageTags, continuityStateForImage);

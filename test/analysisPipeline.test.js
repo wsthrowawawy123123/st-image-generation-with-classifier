@@ -196,7 +196,26 @@ test('imageTagsToSceneTags keeps router image tags before continuity anchors', (
 
     assert.equal(
         prompt,
-        'blowjob, kneeling, mouth contact, genitals exposure, wet, messy, semen, mouth fluid, tight white button-up blouse, black miniskirt, black stockings, black high heels, tight white, leaning, office');
+        'blowjob, kneeling, mouth contact, genitals exposure, wet, messy, semen, mouth fluid, tight white button-up blouse, black miniskirt, black stockings, leaning, office');
+});
+
+test('imageTagsToSceneTags can build fallback tags from current state only', () => {
+    assert.equal(
+        imageTagsToSceneTags([], {
+            current_location: 'closet',
+            current_setting: 'home',
+            last_action: 'kissing',
+            characters: {
+                character: {
+                    pose: 'standing',
+                    attire: 'black dress',
+                    clothing_state: 'disheveled',
+                    state: [],
+                },
+            },
+        }),
+        'black dress, disheveled clothing, standing, kissing, closet, home',
+    );
 });
 
 test('imageTagsToSceneTags builds a compact tag string from image tags', () => {

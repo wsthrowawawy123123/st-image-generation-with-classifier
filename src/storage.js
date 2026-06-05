@@ -278,6 +278,58 @@ export async function getAllMemoryEvents() {
     return requestToPromise(store.getAll());
 }
 
+export async function repairChatData(chatId, repairers = {}) {
+    const db = await initDb();
+    const tx = db.transaction([STORE_SCENES, STORE_MEMORY_EVENTS, STORE_CURRENT_STATE], 'readwrite');
+    const sceneStore = tx.objectStore(STORE_SCENES);
+    const memoryEventStore = tx.objectStore(STORE_MEMORY_EVENTS);
+    const currentStateStore = tx.objectStore(STORE_CURRENT_STATE);
+
+    const scenes = await requestToPromise(sceneStore.index('chat_id').getAll(chatId));
+    const memoryEvents = await requestToPromise(memoryEventStore.index('chat_id').getAll(chatId));
+    const currentState = await requestToPromise(currentStateStore.get(chatId));
+
+    let repairedScenes = 0;
+    let repairedMemoryEvents = 0;
+    let repairedCurrentStates = 0;
+
+    if (typeof repairers.repairSceneRecord === 'function') {
+        for (const scene of scenes) {
+            const repaired = repairers.repairSceneRecord(scene);
+            if (JSON.stringify(repaired) !== JSON.stringify(scene)) {
+                sceneStore.put(repaired);
+                repairedScenes += 1;
+            }
+        }
+    }
+
+    if (typeof repairers.repairMemoryEvent === 'function') {
+        for (const memoryEvent of memoryEvents) {
+            const repaired = repairers.repairMemoryEvent(memoryEvent);
+            if (JSON.stringify(repaired) !== JSON.stringify(memoryEvent)) {
+                memoryEventStore.put(repaired);
+                repairedMemoryEvents += 1;
+            }
+        }
+    }
+
+    if (currentState && typeof repairers.repairCurrentState === 'function') {
+        const repaired = repairers.repairCurrentState(currentState);
+        if (JSON.stringify(repaired) !== JSON.stringify(currentState)) {
+            currentStateStore.put(repaired);
+            repairedCurrentStates += 1;
+        }
+    }
+
+    await transactionDone(tx);
+
+    return {
+        scenes: repairedScenes,
+        memory_events: repairedMemoryEvents,
+        current_states: repairedCurrentStates,
+    };
+}
+
 export async function saveCurrentState(chatIdOrState, maybeCurrentState) {
     const currentState = typeof chatIdOrState === 'string'
         ? { ...maybeCurrentState, chat_id: chatIdOrState }

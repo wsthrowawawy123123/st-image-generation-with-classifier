@@ -12,20 +12,6 @@ import {
 function compactPromptTag(value) {
     let clean = cleanPromptTag(value);
 
-    const replacements = new Map([
-        ['tight white button up', 'tight white button-up blouse'],
-        ['tight white button', 'tight white button-up blouse'],
-        ['assistant wearing tight white button up', 'tight white button-up blouse'],
-        ['assistant wearing tight white button-up blouse', 'tight white button-up blouse'],
-        ['black mini skirt', 'black miniskirt'],
-        ['matching high', 'black high heels'],
-        ['and matching high', 'black high heels'],
-    ]);
-
-    if (replacements.has(clean)) {
-        return replacements.get(clean);
-    }
-
     // Remove weak leading filler words.
     clean = clean
         .replace(/^assistant\s+/, '')
@@ -42,7 +28,10 @@ function compactPromptTag(value) {
         .replace(/^assistant is\s+/, '')
         .replace(/^user is\s+/, '');
 
-    return clean.trim();
+    return clean
+        .replace(/\bbutton up\b/g, 'button-up')
+        .replace(/\bmini skirt\b/g, 'miniskirt')
+        .trim();
 }
 
 function cleanPromptTag(value) {
@@ -69,6 +58,10 @@ function isBadPromptTag(value) {
     }
 
     if (/\b(and|or|with|plus|while|then|as|when|where|of|to|from|in|on|at|for)$/.test(clean)) {
+        return true;
+    }
+
+    if (/\b(button|matching|high)$/.test(clean)) {
         return true;
     }
 
@@ -241,6 +234,17 @@ function cleanPromptTags(values) {
             continue;
         }
 
+        if (result.some(existing => existing.includes(clean))) {
+            continue;
+        }
+
+        for (let index = result.length - 1; index >= 0; index -= 1) {
+            if (clean.includes(result[index])) {
+                seen.delete(result[index]);
+                result.splice(index, 1);
+            }
+        }
+
         seen.add(clean);
         result.push(clean);
     }
@@ -327,6 +331,9 @@ function extractContinuityAnchorValues(continuitySource) {
 
             typeof character.pose === 'string' ? character.pose.trim() : '',
             ...(Array.isArray(character.state) ? character.state : []),
+            typeof continuitySource.last_action === 'string'
+                ? continuitySource.last_action.trim()
+                : '',
 
             typeof continuitySource.current_location === 'string'
                 ? continuitySource.current_location.trim()
